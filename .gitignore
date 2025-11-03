@@ -30,3 +30,9 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# Example binaries and modules
+examples/*/go.mod
+examples/*/go.sum
+examples/basic/basic
+examples/basic/example
