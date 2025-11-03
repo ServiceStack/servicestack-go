@@ -87,11 +87,12 @@ func main() {
 	} else {
 		authResponse := result.(*AuthenticateResponse)
 		fmt.Printf("Authenticated as: %s\n", authResponse.UserName)
-		
+
 		// Set bearer token for subsequent requests
 		if authResponse.BearerToken != "" {
 			client.SetBearerToken(authResponse.BearerToken)
-			fmt.Println("Bearer token set for future requests\n")
+			fmt.Println("Bearer token set for future requests")
+			fmt.Println()
 		}
 	}
 
@@ -99,7 +100,8 @@ func main() {
 	fmt.Println("Example 4: Basic Authentication")
 	client2 := servicestack.NewJsonServiceClient("https://test.servicestack.net")
 	client2.SetCredentials("username", "password")
-	fmt.Println("Basic auth credentials set\n")
+	fmt.Println("Basic auth credentials set")
+	fmt.Println()
 
 	// Example 5: Error handling
 	fmt.Println("Example 5: Error Handling")

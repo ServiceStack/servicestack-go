@@ -54,26 +54,26 @@ type IPatch interface {
 
 // ResponseStatus represents ServiceStack error response status
 type ResponseStatus struct {
-	ErrorCode string                 `json:"errorCode,omitempty"`
-	Message   string                 `json:"message,omitempty"`
-	StackTrace string                `json:"stackTrace,omitempty"`
-	Errors    []ResponseError        `json:"errors,omitempty"`
-	Meta      map[string]string      `json:"meta,omitempty"`
+	ErrorCode  string            `json:"errorCode,omitempty"`
+	Message    string            `json:"message,omitempty"`
+	StackTrace string            `json:"stackTrace,omitempty"`
+	Errors     []ResponseError   `json:"errors,omitempty"`
+	Meta       map[string]string `json:"meta,omitempty"`
 }
 
 // ResponseError represents field-level validation errors
 type ResponseError struct {
-	ErrorCode   string `json:"errorCode,omitempty"`
-	FieldName   string `json:"fieldName,omitempty"`
-	Message     string `json:"message,omitempty"`
-	Meta        map[string]string `json:"meta,omitempty"`
+	ErrorCode string            `json:"errorCode,omitempty"`
+	FieldName string            `json:"fieldName,omitempty"`
+	Message   string            `json:"message,omitempty"`
+	Meta      map[string]string `json:"meta,omitempty"`
 }
 
 // WebServiceException represents ServiceStack service errors
 type WebServiceException struct {
-	StatusCode     int
+	StatusCode        int
 	StatusDescription string
-	ResponseStatus ResponseStatus
+	ResponseStatus    ResponseStatus
 }
 
 func (e *WebServiceException) Error() string {
@@ -221,16 +221,16 @@ func (c *JsonServiceClient) Send(method string, request interface{}, responseTyp
 func (c *JsonServiceClient) getRequestPath(request interface{}) string {
 	// Get the type name and use it as the path
 	typeName := fmt.Sprintf("%T", request)
-	
+
 	// Remove package prefix if present
 	parts := strings.Split(typeName, ".")
 	if len(parts) > 1 {
 		typeName = parts[len(parts)-1]
 	}
-	
+
 	// Remove pointer prefix if present
 	typeName = strings.TrimPrefix(typeName, "*")
-	
+
 	return "/json/reply/" + typeName
 }
 
