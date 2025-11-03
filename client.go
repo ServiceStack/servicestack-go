@@ -206,12 +206,11 @@ func (c *JsonServiceClient) Send(method string, request interface{}, responseTyp
 
 	// Parse successful response
 	if responseType != nil {
-		// Create a new instance of the response type
-		response := newInstance(responseType)
-		if err := json.Unmarshal(respBody, response); err != nil {
+		// responseType is already a pointer to a new instance from ResponseType()
+		if err := json.Unmarshal(respBody, responseType); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal response: %w", err)
 		}
-		return response, nil
+		return responseType, nil
 	}
 
 	return nil, nil
@@ -278,14 +277,4 @@ func (c *JsonServiceClient) parseError(statusCode int, statusDescription string,
 		StatusDescription: statusDescription,
 		ResponseStatus:    errorResponse.ResponseStatus,
 	}
-}
-
-// newInstance creates a new instance of the given type
-func newInstance(responseType interface{}) interface{} {
-	// Use reflection-like approach through JSON marshaling
-	// This creates a new instance of the same type
-	jsonData, _ := json.Marshal(responseType)
-	var result interface{}
-	json.Unmarshal(jsonData, &result)
-	return responseType
 }
