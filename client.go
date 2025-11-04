@@ -1,280 +1,122 @@
+// Package servicestack provides a Go client library for ServiceStack services
 package servicestack
 
 import (
 	"bytes"
-	"encoding/base64"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
 )
 
-// IReturn interface for typed requests that return a response
-type IReturn interface {
-	ResponseType() interface{}
-}
-
-// IReturnVoid interface for requests that don't return a response
-type IReturnVoid interface {
-	CreateResponse() interface{}
-}
-
-// IVerb interface for requests that specify HTTP verb
-type IVerb interface {
-	GetMethod() string
-}
-
-// IGet interface for GET requests
-type IGet interface {
-	IReturn
-}
-
-// IPost interface for POST requests
-type IPost interface {
-	IReturn
-}
-
-// IPut interface for PUT requests
-type IPut interface {
-	IReturn
-}
-
-// IDelete interface for DELETE requests
-type IDelete interface {
-	IReturn
-}
-
-// IPatch interface for PATCH requests
-type IPatch interface {
-	IReturn
-}
-
-// ResponseStatus represents ServiceStack error response status
-type ResponseStatus struct {
-	ErrorCode  string            `json:"errorCode,omitempty"`
-	Message    string            `json:"message,omitempty"`
-	StackTrace string            `json:"stackTrace,omitempty"`
-	Errors     []ResponseError   `json:"errors,omitempty"`
-	Meta       map[string]string `json:"meta,omitempty"`
-}
-
-// ResponseError represents field-level validation errors
-type ResponseError struct {
-	ErrorCode string            `json:"errorCode,omitempty"`
-	FieldName string            `json:"fieldName,omitempty"`
-	Message   string            `json:"message,omitempty"`
-	Meta      map[string]string `json:"meta,omitempty"`
-}
-
-// WebServiceException represents ServiceStack service errors
-type WebServiceException struct {
-	StatusCode        int
-	StatusDescription string
-	ResponseStatus    ResponseStatus
-}
-
-func (e *WebServiceException) Error() string {
-	if e.ResponseStatus.Message != "" {
-		return fmt.Sprintf("%d %s: %s", e.StatusCode, e.StatusDescription, e.ResponseStatus.Message)
-	}
-	return fmt.Sprintf("%d %s", e.StatusCode, e.StatusDescription)
-}
-
-// JsonServiceClient is the main client for making ServiceStack API requests
-type JsonServiceClient struct {
+// Client is the ServiceStack HTTP client
+type Client struct {
 	BaseURL    string
-	httpClient *http.Client
+	HTTPClient *http.Client
 	Headers    map[string]string
 }
 
-// NewJsonServiceClient creates a new JsonServiceClient
-func NewJsonServiceClient(baseURL string) *JsonServiceClient {
-	return &JsonServiceClient{
+// NewClient creates a new ServiceStack client with the given base URL
+func NewClient(baseURL string) *Client {
+	return &Client{
 		BaseURL: baseURL,
-		httpClient: &http.Client{
+		HTTPClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
 		Headers: make(map[string]string),
 	}
 }
 
-// SetTimeout sets the HTTP client timeout
-func (c *JsonServiceClient) SetTimeout(timeout time.Duration) {
-	c.httpClient.Timeout = timeout
+// SetHeader sets a custom header for all requests
+func (c *Client) SetHeader(key, value string) {
+	c.Headers[key] = value
 }
 
-// SetBearerToken sets the Bearer token for authentication
-func (c *JsonServiceClient) SetBearerToken(token string) {
-	c.Headers["Authorization"] = "Bearer " + token
+// Get performs a GET request
+func (c *Client) Get(ctx context.Context, path string, response interface{}) error {
+	return c.doRequest(ctx, http.MethodGet, path, nil, response)
 }
 
-// SetCredentials sets basic authentication credentials
-func (c *JsonServiceClient) SetCredentials(username, password string) {
-	c.Headers["Authorization"] = "Basic " + basicAuth(username, password)
+// Post performs a POST request
+func (c *Client) Post(ctx context.Context, path string, request, response interface{}) error {
+	return c.doRequest(ctx, http.MethodPost, path, request, response)
 }
 
-func basicAuth(username, password string) string {
-	auth := username + ":" + password
-	return base64.StdEncoding.EncodeToString([]byte(auth))
+// Put performs a PUT request
+func (c *Client) Put(ctx context.Context, path string, request, response interface{}) error {
+	return c.doRequest(ctx, http.MethodPut, path, request, response)
 }
 
-// Get sends a GET request
-func (c *JsonServiceClient) Get(request IReturn) (interface{}, error) {
-	return c.Send("GET", request, request.ResponseType())
+// Delete performs a DELETE request
+func (c *Client) Delete(ctx context.Context, path string, response interface{}) error {
+	return c.doRequest(ctx, http.MethodDelete, path, nil, response)
 }
 
-// Post sends a POST request
-func (c *JsonServiceClient) Post(request IReturn) (interface{}, error) {
-	return c.Send("POST", request, request.ResponseType())
+// Patch performs a PATCH request
+func (c *Client) Patch(ctx context.Context, path string, request, response interface{}) error {
+	return c.doRequest(ctx, http.MethodPatch, path, request, response)
 }
 
-// Put sends a PUT request
-func (c *JsonServiceClient) Put(request IReturn) (interface{}, error) {
-	return c.Send("PUT", request, request.ResponseType())
-}
+// doRequest performs the actual HTTP request
+func (c *Client) doRequest(ctx context.Context, method, path string, request, response interface{}) error {
+	// Build full URL
+	fullURL, err := url.JoinPath(c.BaseURL, path)
+	if err != nil {
+		return fmt.Errorf("failed to build URL: %w", err)
+	}
 
-// Delete sends a DELETE request
-func (c *JsonServiceClient) Delete(request IReturn) (interface{}, error) {
-	return c.Send("DELETE", request, request.ResponseType())
-}
-
-// Patch sends a PATCH request
-func (c *JsonServiceClient) Patch(request IReturn) (interface{}, error) {
-	return c.Send("PATCH", request, request.ResponseType())
-}
-
-// Send sends a request with the specified HTTP method
-func (c *JsonServiceClient) Send(method string, request interface{}, responseType interface{}) (interface{}, error) {
-	// Determine the request path
-	requestPath := c.getRequestPath(request)
-	requestURL := c.BaseURL + requestPath
-
+	// Prepare request body
 	var body io.Reader
-	var err error
-
-	// For GET and DELETE, add query string parameters
-	if method == "GET" || method == "DELETE" {
-		params, err := toQueryString(request)
-		if err != nil {
-			return nil, err
-		}
-		if params != "" {
-			requestURL += "?" + params
-		}
-	} else {
-		// For POST, PUT, PATCH, send JSON body
+	if request != nil {
 		jsonData, err := json.Marshal(request)
 		if err != nil {
-			return nil, fmt.Errorf("failed to marshal request: %w", err)
+			return fmt.Errorf("failed to marshal request: %w", err)
 		}
-		body = bytes.NewReader(jsonData)
+		body = bytes.NewBuffer(jsonData)
 	}
 
 	// Create HTTP request
-	req, err := http.NewRequest(method, requestURL, body)
+	req, err := http.NewRequestWithContext(ctx, method, fullURL, body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return fmt.Errorf("failed to create request: %w", err)
 	}
 
 	// Set headers
-	req.Header.Set("Content-Type", "application/json")
+	if request != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
 	req.Header.Set("Accept", "application/json")
 	for key, value := range c.Headers {
 		req.Header.Set(key, value)
 	}
 
-	// Send request
-	resp, err := c.httpClient.Do(req)
+	// Execute request
+	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to send request: %w", err)
+		return fmt.Errorf("failed to execute request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	// Read response body
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
+		return fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	// Check for errors
-	if resp.StatusCode >= 400 {
-		return nil, c.parseError(resp.StatusCode, resp.Status, respBody)
+	// Check status code
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("request failed with status %d: %s", resp.StatusCode, string(respBody))
 	}
 
-	// Parse successful response
-	if responseType != nil {
-		// responseType is already a pointer to a new instance from ResponseType()
-		if err := json.Unmarshal(respBody, responseType); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal response: %w", err)
-		}
-		return responseType, nil
-	}
-
-	return nil, nil
-}
-
-// getRequestPath extracts the request path from the request type name
-func (c *JsonServiceClient) getRequestPath(request interface{}) string {
-	// Get the type name and use it as the path
-	typeName := fmt.Sprintf("%T", request)
-
-	// Remove package prefix if present
-	parts := strings.Split(typeName, ".")
-	if len(parts) > 1 {
-		typeName = parts[len(parts)-1]
-	}
-
-	// Remove pointer prefix if present
-	typeName = strings.TrimPrefix(typeName, "*")
-
-	return "/json/reply/" + typeName
-}
-
-// toQueryString converts a struct to URL query string parameters
-func toQueryString(v interface{}) (string, error) {
-	jsonData, err := json.Marshal(v)
-	if err != nil {
-		return "", err
-	}
-
-	var data map[string]interface{}
-	if err := json.Unmarshal(jsonData, &data); err != nil {
-		return "", err
-	}
-
-	params := url.Values{}
-	for key, value := range data {
-		if value != nil {
-			params.Add(key, fmt.Sprintf("%v", value))
+	// Unmarshal response
+	if response != nil && len(respBody) > 0 {
+		if err := json.Unmarshal(respBody, response); err != nil {
+			return fmt.Errorf("failed to unmarshal response: %w", err)
 		}
 	}
 
-	return params.Encode(), nil
-}
-
-// parseError parses ServiceStack error response
-func (c *JsonServiceClient) parseError(statusCode int, statusDescription string, body []byte) error {
-	var errorResponse struct {
-		ResponseStatus ResponseStatus `json:"responseStatus"`
-	}
-
-	if err := json.Unmarshal(body, &errorResponse); err != nil {
-		// If we can't parse as ServiceStack error, return generic error
-		return &WebServiceException{
-			StatusCode:        statusCode,
-			StatusDescription: statusDescription,
-			ResponseStatus: ResponseStatus{
-				Message: string(body),
-			},
-		}
-	}
-
-	return &WebServiceException{
-		StatusCode:        statusCode,
-		StatusDescription: statusDescription,
-		ResponseStatus:    errorResponse.ResponseStatus,
-	}
+	return nil
 }

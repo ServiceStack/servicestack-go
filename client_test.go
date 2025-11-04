@@ -1,6 +1,7 @@
 package servicestack
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -8,416 +9,295 @@ import (
 	"time"
 )
 
-// Test DTO types
-type HelloRequest struct {
-	Name string `json:"name"`
+type TestRequest struct {
+	Name  string `json:"name"`
+	Value int    `json:"value"`
 }
 
-func (r *HelloRequest) ResponseType() interface{} {
-	return &HelloResponse{}
+type TestResponse struct {
+	Message string `json:"message"`
+	Status  string `json:"status"`
 }
 
-type HelloResponse struct {
-	Result string `json:"result"`
-}
-
-type AuthenticateRequest struct {
-	Provider string `json:"provider"`
-	UserName string `json:"userName"`
-	Password string `json:"password"`
-}
-
-func (r *AuthenticateRequest) ResponseType() interface{} {
-	return &AuthenticateResponse{}
-}
-
-type AuthenticateResponse struct {
-	SessionId      string         `json:"sessionId"`
-	UserName       string         `json:"userName"`
-	BearerToken    string         `json:"bearerToken"`
-	ResponseStatus ResponseStatus `json:"responseStatus,omitempty"`
-}
-
-func TestNewJsonServiceClient(t *testing.T) {
-	client := NewJsonServiceClient("https://test.servicestack.net")
+func TestNewClient(t *testing.T) {
+	client := NewClient("https://api.example.com")
 
 	if client == nil {
 		t.Fatal("Expected client to be created")
 	}
 
-	if client.BaseURL != "https://test.servicestack.net" {
-		t.Errorf("Expected BaseURL to be 'https://test.servicestack.net', got '%s'", client.BaseURL)
+	if client.BaseURL != "https://api.example.com" {
+		t.Errorf("Expected BaseURL to be 'https://api.example.com', got '%s'", client.BaseURL)
 	}
 
-	if client.httpClient == nil {
-		t.Fatal("Expected httpClient to be initialized")
+	if client.HTTPClient == nil {
+		t.Error("Expected HTTPClient to be initialized")
 	}
-}
 
-func TestSetTimeout(t *testing.T) {
-	client := NewJsonServiceClient("https://test.servicestack.net")
-	client.SetTimeout(10 * time.Second)
-
-	if client.httpClient.Timeout != 10*time.Second {
-		t.Errorf("Expected timeout to be 10s, got %v", client.httpClient.Timeout)
+	if client.Headers == nil {
+		t.Error("Expected Headers to be initialized")
 	}
 }
 
-func TestSetBearerToken(t *testing.T) {
-	client := NewJsonServiceClient("https://test.servicestack.net")
-	client.SetBearerToken("test-token")
+func TestSetHeader(t *testing.T) {
+	client := NewClient("https://api.example.com")
+	client.SetHeader("Authorization", "Bearer token123")
 
-	if client.Headers["Authorization"] != "Bearer test-token" {
-		t.Errorf("Expected Authorization header to be 'Bearer test-token', got '%s'", client.Headers["Authorization"])
-	}
-}
-
-func TestPost(t *testing.T) {
-	// Create a test server
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "POST" {
-			t.Errorf("Expected POST request, got %s", r.Method)
-		}
-
-		if r.Header.Get("Content-Type") != "application/json" {
-			t.Errorf("Expected Content-Type to be 'application/json', got '%s'", r.Header.Get("Content-Type"))
-		}
-
-		// Parse request body
-		var reqBody HelloRequest
-		if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
-			t.Errorf("Failed to decode request body: %v", err)
-		}
-
-		// Send response
-		response := HelloResponse{
-			Result: "Hello, " + reqBody.Name + "!",
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
-	}))
-	defer server.Close()
-
-	// Create client and send request
-	client := NewJsonServiceClient(server.URL)
-	request := &HelloRequest{Name: "World"}
-
-	result, err := client.Post(request)
-	if err != nil {
-		t.Fatalf("Expected no error, got %v", err)
-	}
-
-	response, ok := result.(*HelloResponse)
-	if !ok {
-		t.Fatalf("Expected response to be *HelloResponse, got %T", result)
-	}
-
-	if response.Result != "Hello, World!" {
-		t.Errorf("Expected result to be 'Hello, World!', got '%s'", response.Result)
+	if client.Headers["Authorization"] != "Bearer token123" {
+		t.Errorf("Expected Authorization header to be 'Bearer token123', got '%s'", client.Headers["Authorization"])
 	}
 }
 
 func TestGet(t *testing.T) {
 	// Create a test server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "GET" {
-			t.Errorf("Expected GET request, got %s", r.Method)
+		if r.Method != http.MethodGet {
+			t.Errorf("Expected GET method, got %s", r.Method)
 		}
 
-		// Check query parameters
-		name := r.URL.Query().Get("name")
-		if name != "World" {
-			t.Errorf("Expected name parameter to be 'World', got '%s'", name)
+		if r.Header.Get("Accept") != "application/json" {
+			t.Errorf("Expected Accept header to be 'application/json', got '%s'", r.Header.Get("Accept"))
 		}
 
-		// Send response
-		response := HelloResponse{
-			Result: "Hello, " + name + "!",
+		response := TestResponse{
+			Message: "Success",
+			Status:  "OK",
 		}
-		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
-	// Create client and send request
-	client := NewJsonServiceClient(server.URL)
-	request := &HelloRequest{Name: "World"}
+	client := NewClient(server.URL)
+	var response TestResponse
 
-	result, err := client.Get(request)
+	ctx := context.Background()
+	err := client.Get(ctx, "/test", &response)
+
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
 
-	response, ok := result.(*HelloResponse)
-	if !ok {
-		t.Fatalf("Expected response to be *HelloResponse, got %T", result)
+	if response.Message != "Success" {
+		t.Errorf("Expected message 'Success', got '%s'", response.Message)
 	}
 
-	if response.Result != "Hello, World!" {
-		t.Errorf("Expected result to be 'Hello, World!', got '%s'", response.Result)
+	if response.Status != "OK" {
+		t.Errorf("Expected status 'OK', got '%s'", response.Status)
 	}
 }
 
-func TestErrorHandling(t *testing.T) {
-	// Create a test server that returns an error
+func TestPost(t *testing.T) {
+	// Create a test server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-
-		errorResponse := struct {
-			ResponseStatus ResponseStatus `json:"responseStatus"`
-		}{
-			ResponseStatus: ResponseStatus{
-				ErrorCode: "ValidationError",
-				Message:   "Name is required",
-				Errors: []ResponseError{
-					{
-						ErrorCode: "NotEmpty",
-						FieldName: "Name",
-						Message:   "Name cannot be empty",
-					},
-				},
-			},
+		if r.Method != http.MethodPost {
+			t.Errorf("Expected POST method, got %s", r.Method)
 		}
-		json.NewEncoder(w).Encode(errorResponse)
+
+		if r.Header.Get("Content-Type") != "application/json" {
+			t.Errorf("Expected Content-Type header to be 'application/json', got '%s'", r.Header.Get("Content-Type"))
+		}
+
+		var req TestRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("Failed to decode request body: %v", err)
+		}
+
+		if req.Name != "test" {
+			t.Errorf("Expected name 'test', got '%s'", req.Name)
+		}
+
+		if req.Value != 42 {
+			t.Errorf("Expected value 42, got %d", req.Value)
+		}
+
+		response := TestResponse{
+			Message: "Created",
+			Status:  "OK",
+		}
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
-	// Create client and send request
-	client := NewJsonServiceClient(server.URL)
-	request := &HelloRequest{Name: ""}
-
-	_, err := client.Post(request)
-	if err == nil {
-		t.Fatal("Expected error, got nil")
+	client := NewClient(server.URL)
+	request := TestRequest{
+		Name:  "test",
+		Value: 42,
 	}
+	var response TestResponse
 
-	webEx, ok := err.(*WebServiceException)
-	if !ok {
-		t.Fatalf("Expected error to be *WebServiceException, got %T", err)
-	}
+	ctx := context.Background()
+	err := client.Post(ctx, "/test", request, &response)
 
-	if webEx.StatusCode != http.StatusBadRequest {
-		t.Errorf("Expected status code to be 400, got %d", webEx.StatusCode)
-	}
-
-	if webEx.ResponseStatus.ErrorCode != "ValidationError" {
-		t.Errorf("Expected error code to be 'ValidationError', got '%s'", webEx.ResponseStatus.ErrorCode)
-	}
-
-	if webEx.ResponseStatus.Message != "Name is required" {
-		t.Errorf("Expected error message to be 'Name is required', got '%s'", webEx.ResponseStatus.Message)
-	}
-
-	if len(webEx.ResponseStatus.Errors) != 1 {
-		t.Fatalf("Expected 1 field error, got %d", len(webEx.ResponseStatus.Errors))
-	}
-
-	if webEx.ResponseStatus.Errors[0].FieldName != "Name" {
-		t.Errorf("Expected field name to be 'Name', got '%s'", webEx.ResponseStatus.Errors[0].FieldName)
-	}
-}
-
-func TestBasicAuth(t *testing.T) {
-	// Test basic auth encoding
-	encoded := basicAuth("user", "pass")
-	expected := "dXNlcjpwYXNz"
-
-	if encoded != expected {
-		t.Errorf("Expected base64 encoding to be '%s', got '%s'", expected, encoded)
-	}
-}
-
-func TestSetCredentials(t *testing.T) {
-	client := NewJsonServiceClient("https://test.servicestack.net")
-	client.SetCredentials("user", "pass")
-
-	authHeader := client.Headers["Authorization"]
-	if !startsWith(authHeader, "Basic ") {
-		t.Errorf("Expected Authorization header to start with 'Basic ', got '%s'", authHeader)
-	}
-}
-
-func startsWith(s, prefix string) bool {
-	return len(s) >= len(prefix) && s[0:len(prefix)] == prefix
-}
-
-func TestToQueryString(t *testing.T) {
-	request := &HelloRequest{Name: "World"}
-
-	queryString, err := toQueryString(request)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
 
-	if queryString != "name=World" {
-		t.Errorf("Expected query string to be 'name=World', got '%s'", queryString)
-	}
-}
-
-func TestGetRequestPath(t *testing.T) {
-	client := NewJsonServiceClient("https://test.servicestack.net")
-	request := &HelloRequest{Name: "World"}
-
-	path := client.getRequestPath(request)
-	if path != "/json/reply/HelloRequest" {
-		t.Errorf("Expected path to be '/json/reply/HelloRequest', got '%s'", path)
+	if response.Message != "Created" {
+		t.Errorf("Expected message 'Created', got '%s'", response.Message)
 	}
 }
 
 func TestPut(t *testing.T) {
+	// Create a test server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "PUT" {
-			t.Errorf("Expected PUT request, got %s", r.Method)
+		if r.Method != http.MethodPut {
+			t.Errorf("Expected PUT method, got %s", r.Method)
 		}
 
-		response := HelloResponse{Result: "Updated"}
-		w.Header().Set("Content-Type", "application/json")
+		response := TestResponse{
+			Message: "Updated",
+			Status:  "OK",
+		}
 		json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
-	client := NewJsonServiceClient(server.URL)
-	request := &HelloRequest{Name: "Update"}
+	client := NewClient(server.URL)
+	request := TestRequest{Name: "update", Value: 100}
+	var response TestResponse
 
-	result, err := client.Put(request)
+	ctx := context.Background()
+	err := client.Put(ctx, "/test", request, &response)
+
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
 
-	response := result.(*HelloResponse)
-	if response.Result != "Updated" {
-		t.Errorf("Expected result to be 'Updated', got '%s'", response.Result)
+	if response.Message != "Updated" {
+		t.Errorf("Expected message 'Updated', got '%s'", response.Message)
 	}
 }
 
 func TestDelete(t *testing.T) {
+	// Create a test server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "DELETE" {
-			t.Errorf("Expected DELETE request, got %s", r.Method)
+		if r.Method != http.MethodDelete {
+			t.Errorf("Expected DELETE method, got %s", r.Method)
 		}
 
-		response := HelloResponse{Result: "Deleted"}
-		w.Header().Set("Content-Type", "application/json")
+		response := TestResponse{
+			Message: "Deleted",
+			Status:  "OK",
+		}
 		json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
-	client := NewJsonServiceClient(server.URL)
-	request := &HelloRequest{Name: "Delete"}
+	client := NewClient(server.URL)
+	var response TestResponse
 
-	result, err := client.Delete(request)
+	ctx := context.Background()
+	err := client.Delete(ctx, "/test", &response)
+
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
 
-	response := result.(*HelloResponse)
-	if response.Result != "Deleted" {
-		t.Errorf("Expected result to be 'Deleted', got '%s'", response.Result)
+	if response.Message != "Deleted" {
+		t.Errorf("Expected message 'Deleted', got '%s'", response.Message)
 	}
 }
 
 func TestPatch(t *testing.T) {
+	// Create a test server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "PATCH" {
-			t.Errorf("Expected PATCH request, got %s", r.Method)
+		if r.Method != http.MethodPatch {
+			t.Errorf("Expected PATCH method, got %s", r.Method)
 		}
 
-		response := HelloResponse{Result: "Patched"}
-		w.Header().Set("Content-Type", "application/json")
+		response := TestResponse{
+			Message: "Patched",
+			Status:  "OK",
+		}
 		json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
-	client := NewJsonServiceClient(server.URL)
-	request := &HelloRequest{Name: "Patch"}
+	client := NewClient(server.URL)
+	request := TestRequest{Name: "patch", Value: 50}
+	var response TestResponse
 
-	result, err := client.Patch(request)
+	ctx := context.Background()
+	err := client.Patch(ctx, "/test", request, &response)
+
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
 
-	response := result.(*HelloResponse)
-	if response.Result != "Patched" {
-		t.Errorf("Expected result to be 'Patched', got '%s'", response.Result)
+	if response.Message != "Patched" {
+		t.Errorf("Expected message 'Patched', got '%s'", response.Message)
 	}
 }
 
 func TestCustomHeaders(t *testing.T) {
+	// Create a test server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		customHeader := r.Header.Get("X-Custom-Header")
-		if customHeader != "custom-value" {
-			t.Errorf("Expected X-Custom-Header to be 'custom-value', got '%s'", customHeader)
+		if r.Header.Get("X-Custom-Header") != "custom-value" {
+			t.Errorf("Expected X-Custom-Header to be 'custom-value', got '%s'", r.Header.Get("X-Custom-Header"))
 		}
 
-		response := HelloResponse{Result: "OK"}
-		w.Header().Set("Content-Type", "application/json")
+		response := TestResponse{
+			Message: "Success",
+			Status:  "OK",
+		}
 		json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
-	client := NewJsonServiceClient(server.URL)
-	client.Headers["X-Custom-Header"] = "custom-value"
+	client := NewClient(server.URL)
+	client.SetHeader("X-Custom-Header", "custom-value")
+	var response TestResponse
 
-	request := &HelloRequest{Name: "Test"}
-	_, err := client.Post(request)
+	ctx := context.Background()
+	err := client.Get(ctx, "/test", &response)
+
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
 }
 
-func TestWebServiceExceptionError(t *testing.T) {
-	webEx := &WebServiceException{
-		StatusCode:        400,
-		StatusDescription: "Bad Request",
-		ResponseStatus: ResponseStatus{
-			ErrorCode: "ValidationError",
-			Message:   "Validation failed",
-		},
-	}
-
-	errorMsg := webEx.Error()
-	expected := "400 Bad Request: Validation failed"
-	if errorMsg != expected {
-		t.Errorf("Expected error message to be '%s', got '%s'", expected, errorMsg)
-	}
-}
-
-func TestWebServiceExceptionErrorWithoutMessage(t *testing.T) {
-	webEx := &WebServiceException{
-		StatusCode:        500,
-		StatusDescription: "Internal Server Error",
-		ResponseStatus:    ResponseStatus{},
-	}
-
-	errorMsg := webEx.Error()
-	expected := "500 Internal Server Error"
-	if errorMsg != expected {
-		t.Errorf("Expected error message to be '%s', got '%s'", expected, errorMsg)
-	}
-}
-
-func TestNonServiceStackError(t *testing.T) {
+func TestErrorResponse(t *testing.T) {
+	// Create a test server that returns an error
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("Server error"))
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("Bad Request"))
 	}))
 	defer server.Close()
 
-	client := NewJsonServiceClient(server.URL)
-	request := &HelloRequest{Name: "Test"}
+	client := NewClient(server.URL)
+	var response TestResponse
 
-	_, err := client.Post(request)
+	ctx := context.Background()
+	err := client.Get(ctx, "/test", &response)
+
 	if err == nil {
-		t.Fatal("Expected error, got nil")
+		t.Fatal("Expected an error for 400 status code")
 	}
+}
 
-	webEx, ok := err.(*WebServiceException)
-	if !ok {
-		t.Fatalf("Expected error to be *WebServiceException, got %T", err)
-	}
+func TestContextCancellation(t *testing.T) {
+	// Create a test server with a delay
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(100 * time.Millisecond)
+		response := TestResponse{
+			Message: "Success",
+			Status:  "OK",
+		}
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
 
-	if webEx.StatusCode != http.StatusInternalServerError {
-		t.Errorf("Expected status code 500, got %d", webEx.StatusCode)
+	client := NewClient(server.URL)
+	var response TestResponse
+
+	// Create a context with a very short timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+
+	err := client.Get(ctx, "/test", &response)
+
+	if err == nil {
+		t.Fatal("Expected an error due to context cancellation")
 	}
 }
