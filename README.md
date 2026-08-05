@@ -1,360 +1,271 @@
-# ServiceStack Go Client
-
-A Go client library for consuming ServiceStack services using typed DTOs.
-
-## Features
-
-- 🚀 Typed request/response DTOs
-- 🔒 Built-in authentication support (Bearer Token & Basic Auth)
-- 🔄 Support for all HTTP verbs (GET, POST, PUT, DELETE, PATCH)
-- ⚠️ ServiceStack error handling with field-level validation errors
-- 📦 Zero external dependencies (uses only Go standard library)
-- ✅ Full test coverage
 # servicestack-go
 
-ServiceStack Client Go Library
+Typed Go Client Library for consuming [ServiceStack](https://servicestack.net) APIs.
 
-A Go HTTP client library for consuming ServiceStack services.
+- Typed Request/Response DTOs, generated from any ServiceStack API
+- Response Types inferred from the Request DTO — no type assertions, no `interface{}`
+- Structured `ResponseStatus` errors with field validation errors
+- Auth with Basic Auth, API Keys, JWT Bearer Tokens, Refresh Tokens and Session Cookies
+- Batched Requests, one-way Requests and multipart file uploads
+- `context.Context` support on every API
+- Zero dependencies, only the Go standard library
 
-## Installation
+## Install
 
 ```bash
 go get github.com/ServiceStack/servicestack-go
 ```
 
-## Quick Start
+Requires Go 1.21+.
 
-### 1. Define Your DTOs
+## Generate Typed DTOs
 
-Typically, DTOs are generated using ServiceStack's code generation tools. For Go, use:
+Generate the Go DTOs of any ServiceStack API with the [get-dtos](https://www.npmjs.com/package/get-dtos) tool:
 
 ```bash
-x go
+mkdir dtos && cd dtos
+npx get-dtos go https://blazor-vue.web-templates.io
 ```
 
-Or manually define your DTOs:
+Which downloads a `dtos.go` in the `dtos` package containing the typed DTOs of the remote API:
+
+```go
+package dtos
+
+import ss "github.com/ServiceStack/servicestack-go"
+
+// @Route("/hello/{Name}")
+type Hello struct {
+    Name string `json:"name,omitempty"`
+}
+
+func (Hello) CreateResponse() (r HelloResponse) { return }
+func (Hello) HttpMethod() string                { return "GET" }
+
+type HelloResponse struct {
+    Result         string             `json:"result"`
+    ResponseStatus *ss.ResponseStatus `json:"responseStatus,omitempty"`
+}
+```
+
+The generated `CreateResponse()` method is what lets the client infer the Response Type
+of each API, whilst `HttpMethod()` returns the HTTP Verb the API should be called with.
+
 ## Usage
 
 ```go
 package main
 
-import "github.com/ServiceStack/servicestack-go"
+import (
+    "fmt"
 
-// Request DTO
-type HelloRequest struct {
-    Name string `json:"name"`
-}
+    ss "github.com/ServiceStack/servicestack-go"
+    "myapp/dtos"
+)
 
-// Implement IReturn interface to specify response type
-func (r *HelloRequest) ResponseType() interface{} {
-    return &HelloResponse{}
-}
+func main() {
+    client := ss.NewClient("https://blazor-vue.web-templates.io")
 
-// Response DTO
-type HelloResponse struct {
-    Result string `json:"result"`
+    res, err := ss.Send(client, dtos.Hello{Name: "World"}) // res is a dtos.HelloResponse
+    if err != nil {
+        panic(err)
+    }
+    fmt.Println(res.Result)
 }
 ```
 
-### 2. Create a Client
+`Send` uses the HTTP Method the API is annotated with, use `Get`, `Post`, `Put`,
+`Patch` or `Delete` to send a Request DTO with a specific HTTP Method:
 
 ```go
-client := servicestack.NewJsonServiceClient("https://your-service.com")
+res, err := ss.Post(client, dtos.Hello{Name: "World"})
 ```
 
-### 3. Make Requests
+APIs that don't return a Response Body are sent with `SendVoid`:
 
 ```go
-// GET request
-request := &HelloRequest{Name: "World"}
-result, err := client.Get(request)
-if err != nil {
-    log.Fatal(err)
+err := ss.SendVoid(client, dtos.DeleteBooking{Id: 1})
+```
+
+Additional QueryString params can be sent with any Request:
+
+```go
+res, err := ss.Get(client, dtos.Hello{Name: "World"}, map[string]any{"format": "json"})
+```
+
+### AutoQuery
+
+AutoQuery APIs return a typed `QueryResponse[T]`:
+
+```go
+take := 5
+res, err := ss.Send(client, dtos.QueryBookings{
+    QueryDb: ss.QueryDb{QueryBase: ss.QueryBase{Take: &take, OrderByDesc: "id"}},
+})
+for _, booking := range res.Results { // booking is a dtos.Booking
+    fmt.Println(booking.Id, booking.Name)
 }
-response := result.(*HelloResponse)
-fmt.Println(response.Result)
-
-// POST request
-result, err = client.Post(request)
-
-// PUT, DELETE, PATCH also supported
-result, err = client.Put(request)
-result, err = client.Delete(request)
-result, err = client.Patch(request)
 ```
 
-## Authentication
+### Error Handling
 
-### Bearer Token
+Failed API Requests return a `*WebServiceException` containing the HTTP Status Code
+and the API's structured `ResponseStatus` error:
 
 ```go
-client := servicestack.NewJsonServiceClient("https://your-service.com")
-client.SetBearerToken("your-token-here")
-
-// Now all requests include: Authorization: Bearer your-token-here
+_, err := ss.Send(client, dtos.CreateBooking{})
+if webEx, ok := ss.AsWebServiceException(err); ok {
+    fmt.Println(webEx.StatusCode)          // 400
+    fmt.Println(webEx.ErrorCode())         // "NotEmpty"
+    fmt.Println(webEx.ErrorMessage())      // "'Name' must not be empty."
+    fmt.Println(webEx.FieldError("Name"))  // "'Name' must not be empty."
+    fmt.Println(webEx.IsUnauthorized())    // false
+}
 ```
 
-### Basic Authentication
+It also works with the standard `errors` package:
 
 ```go
-client := servicestack.NewJsonServiceClient("https://your-service.com")
+var webEx *ss.WebServiceException
+if errors.As(err, &webEx) { /* ... */ }
+```
+
+Alternatively `Api` returns errors in its result instead of a separate `error`:
+
+```go
+api := ss.Api(client, dtos.CreateBooking{})
+if api.Failed() {
+    fmt.Println(api.ErrorCode(), api.ErrorMessage(), api.FieldError("Name"))
+} else {
+    fmt.Println(api.Response.Id)
+}
+```
+
+### Authentication
+
+API Keys and JWTs are sent in the Bearer Token Authorization header:
+
+```go
+client.SetBearerToken("ak-87949de37e894627a9f6173154e7cafa")
+```
+
+HTTP Basic Auth credentials:
+
+```go
 client.SetCredentials("username", "password")
-
-// Now all requests include: Authorization: Basic <base64-encoded-credentials>
 ```
 
-### ServiceStack Authentication
+Sign in with ServiceStack's Authenticate API, which maintains the authenticated
+Session in the Client's cookie jar and uses any Bearer Token the Server returns:
 
 ```go
-type AuthenticateRequest struct {
-    Provider string `json:"provider"`
-    UserName string `json:"userName"`
-    Password string `json:"password"`
-}
-
-func (r *AuthenticateRequest) ResponseType() interface{} {
-    return &AuthenticateResponse{}
-}
-
-type AuthenticateResponse struct {
-    SessionId   string `json:"sessionId"`
-    BearerToken string `json:"bearerToken"`
-}
-
-// Authenticate
-authRequest := &AuthenticateRequest{
-    Provider: "credentials",
-    UserName: "user",
-    Password: "pass",
-}
-
-result, err := client.Post(authRequest)
-if err != nil {
-    log.Fatal(err)
-}
-
-authResponse := result.(*AuthenticateResponse)
-client.SetBearerToken(authResponse.BearerToken)
+authRes, err := client.Authenticate("username", "password")
 ```
 
-## Error Handling
-
-ServiceStack errors include detailed validation information:
+When a Refresh Token is configured, expired Bearer Tokens are transparently
+refreshed and the failed Request retried:
 
 ```go
-result, err := client.Post(request)
-if err != nil {
-    if webEx, ok := err.(*servicestack.WebServiceException); ok {
-        fmt.Printf("Error: %s - %s\n", 
-            webEx.ResponseStatus.ErrorCode, 
-            webEx.ResponseStatus.Message)
-        
-        // Handle field-level validation errors
-        for _, fieldError := range webEx.ResponseStatus.Errors {
-            fmt.Printf("Field '%s': %s\n", 
-                fieldError.FieldName, 
-                fieldError.Message)
-        }
-    } else {
-        log.Fatal(err)
-    }
-}
+client.SetRefreshToken(refreshToken)
 ```
 
-## Configuration
-
-### Custom Timeout
+Otherwise `OnAuthenticationRequired` can be used to re-authenticate before a
+`401 Unauthorized` Request is retried:
 
 ```go
-client := servicestack.NewJsonServiceClient("https://your-service.com")
-client.SetTimeout(60 * time.Second)
+client.OnAuthenticationRequired = func(c *ss.Client) error {
+    _, err := c.Authenticate("username", "password")
+    return err
+}
 ```
 
-### Custom Headers
+### Batched Requests
+
+Send multiple Requests of the same Type in a single HTTP Request:
 
 ```go
-client := servicestack.NewJsonServiceClient("https://your-service.com")
-client.Headers["X-Custom-Header"] = "value"
+responses, err := ss.SendAll(client, []dtos.Hello{{Name: "A"}, {Name: "B"}})
 ```
 
-## Complete Example
+Or send them to a one-way endpoint that ignores their Responses:
 
 ```go
-package main
-
-import (
-    "fmt"
-    "log"
-    "github.com/ServiceStack/servicestack-go"
-)
-
-type HelloRequest struct {
-    Name string `json:"name"`
-}
-
-func (r *HelloRequest) ResponseType() interface{} {
-    return &HelloResponse{}
-}
-
-type HelloResponse struct {
-    Result string `json:"result"`
-}
-
-func main() {
-    // Create client
-    client := servicestack.NewJsonServiceClient("https://test.servicestack.net")
-    
-    // Make request
-    request := &HelloRequest{Name: "World"}
-    result, err := client.Post(request)
-    if err != nil {
-        log.Fatal(err)
-    }
-    
-    // Use response
-    response := result.(*HelloResponse)
-    fmt.Println(response.Result)
-}
+err := ss.PublishAll(client, []dtos.Hello{{Name: "A"}, {Name: "B"}})
 ```
 
-## API Reference
+### File Uploads
 
-### Client Methods
+```go
+file, _ := os.Open("photo.png")
+defer file.Close()
 
-- `NewJsonServiceClient(baseURL string)` - Create a new client
-- `Get(request IReturn)` - Send a GET request
-- `Post(request IReturn)` - Send a POST request
-- `Put(request IReturn)` - Send a PUT request
-- `Delete(request IReturn)` - Send a DELETE request
-- `Patch(request IReturn)` - Send a PATCH request
-- `Send(method string, request interface{}, responseType interface{})` - Send with custom method
-- `SetTimeout(timeout time.Duration)` - Set request timeout
-- `SetBearerToken(token string)` - Set bearer token authentication
-- `SetCredentials(username, password string)` - Set basic authentication
+res, err := ss.PostFileWithRequest(client, dtos.UploadPhoto{Album: "Holiday"}, ss.UploadFile{
+    FieldName:   "file",
+    FileName:    "photo.png",
+    ContentType: "image/png",
+    Reader:      file,
+})
+```
 
-### Interfaces
+### Custom URLs
 
-- `IReturn` - Implemented by request DTOs that return a response
-- `ResponseType() interface{}` - Returns the expected response type
+Send Requests to custom routes or external URLs:
 
-### Types
+```go
+res, err := ss.GetUrl[dtos.HelloResponse](client, "/hello/World")
+res, err := ss.PostUrl[dtos.HelloResponse](client, "/hello", dtos.Hello{Name: "World"})
+```
 
-- `ResponseStatus` - ServiceStack error response status
-- `ResponseError` - Field-level validation error
-- `WebServiceException` - ServiceStack service exception
+Any Response Type can be requested, including `string` and `[]byte`:
 
-## Running Tests
+```go
+csv, err := ss.GetUrl[string](client, "/api/QueryBookings.csv")
+```
+
+### context.Context
+
+Every API has a `*Ctx` variant accepting a `context.Context`:
+
+```go
+ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+defer cancel()
+
+res, err := ss.SendCtx(ctx, client, dtos.Hello{Name: "World"})
+```
+
+### Client Configuration
+
+```go
+client := ss.NewClient("https://example.org")
+client.SetHeader("X-Custom", "Value")
+client.SetTimeout(10 * time.Second)
+client.SetFollowRedirects(false)
+client.UserAgent = "my-app/1.0"
+
+// Inspect or modify each Request and Response
+client.RequestFilter = func(req *http.Request) { log.Println(req.Method, req.URL) }
+client.ResponseFilter = func(res *http.Response) { log.Println(res.Status) }
+
+// Replace the underlying *http.Client to customize transports, proxies or TLS
+client.HttpClient = &http.Client{Timeout: 30 * time.Second}
+```
+
+`NewClient` sends Requests to ServiceStack's pre-defined `/api` route. Use
+`NewJsonServiceClient` for older ServiceStack instances that only have the
+`/json/reply` routes enabled, or `SetBasePath` for a custom base path.
+
+## Examples
+
+- [examples/hello](examples/hello) — typed APIs, error handling and batched Requests
+  against the live https://test.servicestack.net Services.
+
+## Tests
 
 ```bash
-go test -v
-```
-
-## Running the Example
-
-```bash
-cd examples
-go run main.go
-import (
-    "context"
-    "fmt"
-    "log"
-    
-    "github.com/ServiceStack/servicestack-go"
-)
-
-func main() {
-    // Create a new client
-    client := servicestack.NewClient("https://api.example.com")
-    
-    // Set custom headers if needed
-    client.SetHeader("Authorization", "Bearer your-token")
-    
-    // Define your request and response types
-    type HelloRequest struct {
-        Name string `json:"name"`
-    }
-    
-    type HelloResponse struct {
-        Result string `json:"result"`
-    }
-    
-    // Make a POST request
-    request := HelloRequest{Name: "World"}
-    var response HelloResponse
-    
-    ctx := context.Background()
-    err := client.Post(ctx, "/hello", request, &response)
-    if err != nil {
-        log.Fatal(err)
-    }
-    
-    fmt.Println(response.Result)
-}
-```
-
-## Features
-
-- Support for all HTTP methods: GET, POST, PUT, DELETE, PATCH
-- Automatic JSON serialization/deserialization
-- Context support for cancellation and timeouts
-- Custom headers support
-- Simple and idiomatic Go API
-
-## API
-
-### Creating a Client
-
-```go
-client := servicestack.NewClient("https://api.example.com")
-```
-
-### Setting Custom Headers
-
-```go
-client.SetHeader("Authorization", "Bearer token")
-client.SetHeader("X-Custom-Header", "value")
-```
-
-### Making Requests
-
-#### GET Request
-```go
-var response MyResponse
-err := client.Get(ctx, "/endpoint", &response)
-```
-
-#### POST Request
-```go
-request := MyRequest{...}
-var response MyResponse
-err := client.Post(ctx, "/endpoint", request, &response)
-```
-
-#### PUT Request
-```go
-request := MyRequest{...}
-var response MyResponse
-err := client.Put(ctx, "/endpoint", request, &response)
-```
-
-#### DELETE Request
-```go
-var response MyResponse
-err := client.Delete(ctx, "/endpoint", &response)
-```
-
-#### PATCH Request
-```go
-request := MyRequest{...}
-var response MyResponse
-err := client.Patch(ctx, "/endpoint", request, &response)
+go test ./...                    # unit tests
+go test -tags integration ./...  # integration tests against test.servicestack.net
 ```
 
 ## License
 
-This library is released under the same license as ServiceStack.
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-See [LICENSE](LICENSE) for details.
+BSD-3-Clause. See [LICENSE](LICENSE).

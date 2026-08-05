@@ -7,7 +7,6 @@
 *.dll
 *.so
 *.dylib
-examples/examples
 
 # Test binary, built with `go test -c`
 *.test
@@ -32,8 +31,6 @@ go.work.sum
 # .idea/
 # .vscode/
 
-# Example binaries and modules
-examples/*/go.mod
-examples/*/go.sum
-examples/basic/basic
-examples/basic/example
+# Example binaries
+examples/*/hello
+examples/*/example
