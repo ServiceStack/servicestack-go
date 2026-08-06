@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	ss "github.com/ServiceStack/servicestack-go"
+	"github.com/ServiceStack/servicestack-go/dtos"
 )
 
 // Model the ChatCompletion integration test uses, available on test.servicestack.net
@@ -25,68 +26,22 @@ func testUrl() string {
 	return "https://test.servicestack.net"
 }
 
-// Hand-written DTOs matching the remote Services, generated DTOs have the same shape.
-
-type Hello struct {
-	Name string `json:"name,omitempty"`
-}
-
-func (Hello) CreateResponse() (r HelloResponse) { return }
-func (Hello) HttpMethod() string                { return ss.HttpGet }
-
-type HelloResponse struct {
-	Result string `json:"result,omitempty"`
-}
-
-type ThrowValidation struct {
-	Age   int    `json:"age,omitempty"`
-	Email string `json:"email,omitempty"`
-}
-
-func (ThrowValidation) CreateResponse() (r ThrowValidationResponse) { return }
-func (ThrowValidation) HttpMethod() string                          { return ss.HttpPost }
-
-type ThrowValidationResponse struct {
-	Age            int                `json:"age,omitempty"`
-	Email          string             `json:"email,omitempty"`
-	ResponseStatus *ss.ResponseStatus `json:"responseStatus,omitempty"`
-}
-
-type ThrowType struct {
-	Type    string `json:"type,omitempty"`
-	Message string `json:"message,omitempty"`
-}
-
-func (ThrowType) CreateResponse() (r ThrowTypeResponse) { return }
-func (ThrowType) HttpMethod() string                    { return ss.HttpGet }
-
-type ThrowTypeResponse struct {
-	ResponseStatus *ss.ResponseStatus `json:"responseStatus,omitempty"`
-}
-
-type HelloSecure struct {
-	Name string `json:"name,omitempty"`
-}
-
-func (HelloSecure) CreateResponse() (r HelloResponse) { return }
-func (HelloSecure) HttpMethod() string                { return ss.HttpGet }
-
 func TestIntegrationSend(t *testing.T) {
 	client := ss.NewClient(testUrl())
 
-	res, err := ss.Send(client, Hello{Name: "World"})
+	res, err := ss.Send(client, dtos.Hello{Name: "World", Title: "Mr"})
 	if err != nil {
 		t.Fatalf("Send failed: %v", err)
 	}
-	if res.Result != "Hello, World!" {
-		t.Errorf("got %q, want Hello, World!", res.Result)
+	if res.Result != "Hello, Mr. World!" {
+		t.Errorf("got %q, want Hello, Mr. World!", res.Result)
 	}
 }
 
 func TestIntegrationValidationErrors(t *testing.T) {
 	client := ss.NewClient(testUrl())
 
-	_, err := ss.Send(client, ThrowValidation{})
+	_, err := ss.Send(client, dtos.ThrowValidation{})
 	webEx, ok := ss.AsWebServiceException(err)
 	if !ok {
 		t.Fatalf("got %T, want *WebServiceException", err)
@@ -108,7 +63,7 @@ func TestIntegrationValidationErrors(t *testing.T) {
 func TestIntegrationErrorStatusCodes(t *testing.T) {
 	client := ss.NewClient(testUrl())
 
-	_, err := ss.Send(client, ThrowType{Type: "NotFound", Message: "Not Here"})
+	_, err := ss.Send(client, dtos.ThrowType{Type: "NotFound", Message: "Not Here"})
 	webEx, ok := ss.AsWebServiceException(err)
 	if !ok {
 		t.Fatalf("got %T, want *WebServiceException", err)
@@ -124,7 +79,7 @@ func TestIntegrationErrorStatusCodes(t *testing.T) {
 func TestIntegrationUnauthorized(t *testing.T) {
 	client := ss.NewClient(testUrl())
 
-	api := ss.Api(client, HelloSecure{Name: "World"})
+	api := ss.Api(client, dtos.HelloSecure{Name: "World"})
 	if api.Succeeded() {
 		t.Fatal("expected HelloSecure to require authentication")
 	}
@@ -145,7 +100,7 @@ func TestIntegrationAuthenticateThenCallSecureService(t *testing.T) {
 	}
 
 	// The authenticated Session is maintained in the Client's cookie jar
-	res, err := ss.Send(client, HelloSecure{Name: "World"})
+	res, err := ss.Send(client, dtos.HelloSecure{Name: "World"})
 	if err != nil {
 		t.Fatalf("HelloSecure failed: %v", err)
 	}
@@ -157,14 +112,14 @@ func TestIntegrationAuthenticateThenCallSecureService(t *testing.T) {
 func TestIntegrationSendAll(t *testing.T) {
 	client := ss.NewClient(testUrl())
 
-	responses, err := ss.SendAll(client, []Hello{{Name: "A"}, {Name: "B"}})
+	responses, err := ss.SendAll(client, []dtos.Hello{{Name: "A", Title: "Mr"}, {Name: "B", Title: "Ms"}})
 	if err != nil {
 		t.Fatalf("SendAll failed: %v", err)
 	}
 	if len(responses) != 2 {
 		t.Fatalf("got %d responses, want 2", len(responses))
 	}
-	if responses[0].Result != "Hello, A!" || responses[1].Result != "Hello, B!" {
+	if responses[0].Result != "Hello, Mr. A!" || responses[1].Result != "Hello, Ms. B!" {
 		t.Errorf("got %+v", responses)
 	}
 }
@@ -172,7 +127,7 @@ func TestIntegrationSendAll(t *testing.T) {
 func TestIntegrationCustomRoute(t *testing.T) {
 	client := ss.NewClient(testUrl())
 
-	res, err := ss.GetUrl[HelloResponse](client, "/hello/World")
+	res, err := ss.GetUrl[dtos.HelloResponse](client, "/hello/World")
 	if err != nil {
 		t.Fatalf("GetUrl failed: %v", err)
 	}
@@ -181,47 +136,7 @@ func TestIntegrationCustomRoute(t *testing.T) {
 	}
 }
 
-// ── AI Chat ──
-
-// DTOs of ServiceStack's AI Chat ChatCompletion API, an OpenAI-compatible
-// Chat Completions endpoint.
-
-type AiTextContent struct {
-	Type string `json:"type"`
-	Text string `json:"text"`
-}
-
-type AiMessage struct {
-	Role    string `json:"role"`
-	Content []any  `json:"content,omitempty"`
-}
-
-type ChatCompletion struct {
-	Model    string      `json:"model"`
-	Messages []AiMessage `json:"messages"`
-}
-
-func (ChatCompletion) CreateResponse() (r ChatResponse) { return }
-func (ChatCompletion) HttpMethod() string               { return ss.HttpPost }
-
-type ChoiceMessage struct {
-	Role      string `json:"role,omitempty"`
-	Content   string `json:"content,omitempty"`
-	Reasoning string `json:"reasoning,omitempty"`
-}
-
-type Choice struct {
-	Index        int           `json:"index,omitempty"`
-	FinishReason string        `json:"finish_reason,omitempty"`
-	Message      ChoiceMessage `json:"message"`
-}
-
-type ChatResponse struct {
-	Id      string   `json:"id,omitempty"`
-	Model   string   `json:"model,omitempty"`
-	Choices []Choice `json:"choices,omitempty"`
-}
-
+// Sends a Request to ServiceStack AI Chat's OpenAI-compatible ChatCompletion API
 func TestIntegrationChatCompletion(t *testing.T) {
 	client := ss.NewClient(testUrl())
 
@@ -230,13 +145,17 @@ func TestIntegrationChatCompletion(t *testing.T) {
 		t.Fatalf("Authenticate failed: %v", err)
 	}
 
-	res, err := ss.Send(client, ChatCompletion{
+	res, err := ss.Send(client, dtos.ChatCompletion{
 		Model: chatModel,
-		Messages: []AiMessage{
+		Messages: []dtos.AiMessage{
 			{
 				Role: "user",
+				// Content parts are polymorphic, e.g. text, image_url or input_audio
 				Content: []any{
-					AiTextContent{Type: "text", Text: "Capital of France? Answer in 3 words"},
+					dtos.AiTextContent{
+						AiContent: dtos.AiContent{Type: "text"},
+						Text:      "Capital of France? Answer in 3 words",
+					},
 				},
 			},
 		},

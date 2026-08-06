@@ -1,5 +1,5 @@
 /* Options:
-Date: 2026-08-06 12:48:50
+Date: 2026-08-06 15:15:57
 Version: 10.09
 Tip: To override a DTO option, remove "//" prefix before updating
 BaseUrl: https://test.servicestack.net
@@ -573,7 +573,7 @@ type Booking struct {
 	PostalAddress   *Address `json:"postalAddress,omitempty"`
 }
 
-type QueryDbTenant struct {
+type QueryDbTenant[From any, Into any] struct {
 	ss.QueryDb
 }
 
@@ -636,32 +636,32 @@ type RockstarAudit struct {
 	ModifiedInfo string    `json:"modifiedInfo"`
 }
 
-type CreateAuditBase struct {
+type CreateAuditBase[Table any, TResponse any] struct {
 }
 
-type CreateAuditTenantBase struct {
-	CreateAuditBase
+type CreateAuditTenantBase[Table any, TResponse any] struct {
+	CreateAuditBase[Table, TResponse]
 }
 
-type UpdateAuditBase struct {
+type UpdateAuditBase[Table any, TResponse any] struct {
 }
 
-type UpdateAuditTenantBase struct {
-	UpdateAuditBase
+type UpdateAuditTenantBase[Table any, TResponse any] struct {
+	UpdateAuditBase[Table, TResponse]
 }
 
-type PatchAuditBase struct {
+type PatchAuditBase[Table any, TResponse any] struct {
 }
 
-type PatchAuditTenantBase struct {
-	PatchAuditBase
+type PatchAuditTenantBase[Table any, TResponse any] struct {
+	PatchAuditBase[Table, TResponse]
 }
 
-type SoftDeleteAuditBase struct {
+type SoftDeleteAuditBase[Table any, TResponse any] struct {
 }
 
-type SoftDeleteAuditTenantBase struct {
-	SoftDeleteAuditBase
+type SoftDeleteAuditTenantBase[Table any, TResponse any] struct {
+	SoftDeleteAuditBase[Table, TResponse]
 }
 
 type RockstarVersion struct {
@@ -679,10 +679,10 @@ type MessageCrud struct {
 func (MessageCrud) CreateResponseVoid() {}
 func (MessageCrud) HttpMethod() string  { return "PUT" }
 
-type QueryResponseAlt struct {
+type QueryResponseAlt[T any] struct {
 	Offset         int               `json:"offset,omitempty"`
 	Total          int               `json:"total,omitempty"`
-	Results        []interface{}     `json:"results"`
+	Results        []T               `json:"results"`
 	Meta           map[string]string `json:"meta"`
 	ResponseStatus ss.ResponseStatus `json:"responseStatus"`
 }
@@ -1611,8 +1611,8 @@ type AltQueryItems struct {
 	Name string `json:"name"`
 }
 
-func (AltQueryItems) CreateResponse() (r QueryResponseAlt) { return }
-func (AltQueryItems) HttpMethod() string                   { return "POST" }
+func (AltQueryItems) CreateResponse() (r QueryResponseAlt[Item]) { return }
+func (AltQueryItems) HttpMethod() string                         { return "POST" }
 
 type GetItems struct {
 }
@@ -2621,7 +2621,7 @@ func (QueryAddresses) CreateResponse() (r ss.QueryResponse[Address]) { return }
 func (QueryAddresses) HttpMethod() string                            { return "GET" }
 
 type QueryRockstarAudit struct {
-	QueryDbTenant
+	QueryDbTenant[RockstarAuditTenant, RockstarAuto]
 	Id *int `json:"id,omitempty"`
 }
 
@@ -2792,7 +2792,7 @@ func (CreateRockstarAudit) CreateResponse() (r RockstarWithIdResponse) { return 
 func (CreateRockstarAudit) HttpMethod() string                         { return "POST" }
 
 type CreateRockstarAuditTenant struct {
-	CreateAuditTenantBase
+	CreateAuditTenantBase[RockstarAuditTenant, RockstarWithIdAndResultResponse]
 	SessionId    string       `json:"sessionId"`
 	FirstName    string       `json:"firstName"`
 	LastName     string       `json:"lastName"`
@@ -2806,7 +2806,7 @@ func (CreateRockstarAuditTenant) CreateResponse() (r RockstarWithIdAndResultResp
 func (CreateRockstarAuditTenant) HttpMethod() string                                  { return "POST" }
 
 type UpdateRockstarAuditTenant struct {
-	UpdateAuditTenantBase
+	UpdateAuditTenantBase[RockstarAuditTenant, RockstarWithIdAndResultResponse]
 	SessionId    string        `json:"sessionId"`
 	Id           int           `json:"id,omitempty"`
 	FirstName    string        `json:"firstName"`
@@ -2817,7 +2817,7 @@ func (UpdateRockstarAuditTenant) CreateResponse() (r RockstarWithIdAndResultResp
 func (UpdateRockstarAuditTenant) HttpMethod() string                                  { return "PUT" }
 
 type PatchRockstarAuditTenant struct {
-	PatchAuditTenantBase
+	PatchAuditTenantBase[RockstarAuditTenant, RockstarWithIdAndResultResponse]
 	SessionId    string        `json:"sessionId"`
 	Id           int           `json:"id,omitempty"`
 	FirstName    string        `json:"firstName"`
@@ -2828,7 +2828,7 @@ func (PatchRockstarAuditTenant) CreateResponse() (r RockstarWithIdAndResultRespo
 func (PatchRockstarAuditTenant) HttpMethod() string                                  { return "PATCH" }
 
 type SoftDeleteAuditTenant struct {
-	SoftDeleteAuditTenantBase
+	SoftDeleteAuditTenantBase[RockstarAuditTenant, RockstarWithIdAndResultResponse]
 	Id int `json:"id,omitempty"`
 }
 
