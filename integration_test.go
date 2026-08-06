@@ -15,6 +15,9 @@ import (
 	ss "github.com/ServiceStack/servicestack-go"
 )
 
+// Model the ChatCompletion integration test uses, available on test.servicestack.net
+const chatModel = "openai/gpt-oss-120b"
+
 func testUrl() string {
 	if baseUrl := os.Getenv("SERVICESTACK_TEST_URL"); baseUrl != "" {
 		return baseUrl
@@ -175,5 +178,84 @@ func TestIntegrationCustomRoute(t *testing.T) {
 	}
 	if res.Result != "Hello, World!" {
 		t.Errorf("got %q, want Hello, World!", res.Result)
+	}
+}
+
+// ── AI Chat ──
+
+// DTOs of ServiceStack's AI Chat ChatCompletion API, an OpenAI-compatible
+// Chat Completions endpoint.
+
+type AiTextContent struct {
+	Type string `json:"type"`
+	Text string `json:"text"`
+}
+
+type AiMessage struct {
+	Role    string `json:"role"`
+	Content []any  `json:"content,omitempty"`
+}
+
+type ChatCompletion struct {
+	Model    string      `json:"model"`
+	Messages []AiMessage `json:"messages"`
+}
+
+func (ChatCompletion) CreateResponse() (r ChatResponse) { return }
+func (ChatCompletion) HttpMethod() string               { return ss.HttpPost }
+
+type ChoiceMessage struct {
+	Role      string `json:"role,omitempty"`
+	Content   string `json:"content,omitempty"`
+	Reasoning string `json:"reasoning,omitempty"`
+}
+
+type Choice struct {
+	Index        int           `json:"index,omitempty"`
+	FinishReason string        `json:"finish_reason,omitempty"`
+	Message      ChoiceMessage `json:"message"`
+}
+
+type ChatResponse struct {
+	Id      string   `json:"id,omitempty"`
+	Model   string   `json:"model,omitempty"`
+	Choices []Choice `json:"choices,omitempty"`
+}
+
+func TestIntegrationChatCompletion(t *testing.T) {
+	client := ss.NewClient(testUrl())
+
+	// The ChatCompletion API requires an authenticated User
+	if _, err := client.Authenticate("test", "test"); err != nil {
+		t.Fatalf("Authenticate failed: %v", err)
+	}
+
+	res, err := ss.Send(client, ChatCompletion{
+		Model: chatModel,
+		Messages: []AiMessage{
+			{
+				Role: "user",
+				Content: []any{
+					AiTextContent{Type: "text", Text: "Capital of France? Answer in 3 words"},
+				},
+			},
+		},
+	})
+	if err != nil {
+		// A shared LLM can be rate limited or temporarily unavailable
+		if webEx, ok := ss.AsWebServiceException(err); ok && webEx.IsAny(429, 502, 503, 504) {
+			t.Skipf("ChatCompletion unavailable: %v", err)
+		}
+		t.Fatalf("ChatCompletion failed: %v", err)
+	}
+
+	if len(res.Choices) == 0 {
+		t.Fatalf("got no choices, response: %+v", res)
+	}
+	if res.Choices[0].Message.Content == "" {
+		t.Errorf("got an empty message, response: %+v", res)
+	}
+	if res.Model != chatModel {
+		t.Errorf("got model %q, want %q", res.Model, chatModel)
 	}
 }
