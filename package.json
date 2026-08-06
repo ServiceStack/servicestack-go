@@ -1,6 +1,6 @@
 {
   "name": "servicestack-go",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Typed Go Client Library for consuming ServiceStack APIs",
   "repository": "ServiceStack/servicestack-go",
   "private": true,
