@@ -307,7 +307,7 @@ const (
 	EnumStyleMembersPascalUpper                  = "PascalUPPER"
 )
 
-type KeyValuePair struct {
+type KeyValuePair[TKey any, TValue any] struct {
 	Key   TKey   `json:"key"`
 	Value TValue `json:"value"`
 }
@@ -318,41 +318,41 @@ type SubType struct {
 }
 
 type AllTypesBase struct {
-	Id               int               `json:"id,omitempty"`
-	NullableId       *int              `json:"nullableId,omitempty"`
-	Byte             byte              `json:"byte,omitempty"`
-	Short            int16             `json:"short,omitempty"`
-	Int              int               `json:"int,omitempty"`
-	Long             int64             `json:"long,omitempty"`
-	UShort           uint16            `json:"uShort,omitempty"`
-	UInt             uint32            `json:"uInt,omitempty"`
-	ULong            uint64            `json:"uLong,omitempty"`
-	Float            float32           `json:"float,omitempty"`
-	Double           float64           `json:"double,omitempty"`
-	Decimal          float64           `json:"decimal,omitempty"`
-	String           string            `json:"string"`
-	DateTime         time.Time         `json:"dateTime,omitempty"`
-	TimeSpan         time.Duration     `json:"timeSpan,omitempty"`
-	DateTimeOffset   time.Time         `json:"dateTimeOffset,omitempty"`
-	Guid             string            `json:"guid,omitempty"`
-	Char             string            `json:"char,omitempty"`
-	KeyValuePair     KeyValuePair      `json:"keyValuePair,omitempty"`
-	NullableDateTime *time.Time        `json:"nullableDateTime,omitempty"`
-	NullableTimeSpan *time.Duration    `json:"nullableTimeSpan,omitempty"`
-	StringList       []string          `json:"stringList"`
-	StringArray      []string          `json:"stringArray"`
-	StringMap        map[string]string `json:"stringMap"`
-	IntStringMap     map[int]string    `json:"intStringMap"`
-	SubType          SubType           `json:"subType"`
+	Id               int                          `json:"id,omitempty"`
+	NullableId       *int                         `json:"nullableId,omitempty"`
+	Byte             byte                         `json:"byte,omitempty"`
+	Short            int16                        `json:"short,omitempty"`
+	Int              int                          `json:"int,omitempty"`
+	Long             int64                        `json:"long,omitempty"`
+	UShort           uint16                       `json:"uShort,omitempty"`
+	UInt             uint32                       `json:"uInt,omitempty"`
+	ULong            uint64                       `json:"uLong,omitempty"`
+	Float            float32                      `json:"float,omitempty"`
+	Double           float64                      `json:"double,omitempty"`
+	Decimal          float64                      `json:"decimal,omitempty"`
+	String           string                       `json:"string"`
+	DateTime         time.Time                    `json:"dateTime,omitempty"`
+	TimeSpan         time.Duration                `json:"timeSpan,omitempty"`
+	DateTimeOffset   time.Time                    `json:"dateTimeOffset,omitempty"`
+	Guid             string                       `json:"guid,omitempty"`
+	Char             string                       `json:"char,omitempty"`
+	KeyValuePair     KeyValuePair[string, string] `json:"keyValuePair,omitempty"`
+	NullableDateTime *time.Time                   `json:"nullableDateTime,omitempty"`
+	NullableTimeSpan *time.Duration               `json:"nullableTimeSpan,omitempty"`
+	StringList       []string                     `json:"stringList"`
+	StringArray      []string                     `json:"stringArray"`
+	StringMap        map[string]string            `json:"stringMap"`
+	IntStringMap     map[int]string               `json:"intStringMap"`
+	SubType          SubType                      `json:"subType"`
 }
 
 type HelloBase struct {
 	Id int `json:"id,omitempty"`
 }
 
-type HelloBase struct {
-	Items  []interface{} `json:"items"`
-	Counts []int         `json:"counts"`
+type HelloBase_1[T any] struct {
+	Items  []T   `json:"items"`
+	Counts []int `json:"counts"`
 }
 
 type IPoco struct {
@@ -1142,25 +1142,25 @@ type TestFileUploadsResponse struct {
 }
 
 type TestUploadWithDto struct {
-	Int                   int                 `json:"int,omitempty"`
-	NullableId            *int                `json:"nullableId,omitempty"`
-	Long                  int64               `json:"long,omitempty"`
-	Double                float64             `json:"double,omitempty"`
-	String                string              `json:"string"`
-	DateTime              time.Time           `json:"dateTime,omitempty"`
-	IntArray              []int               `json:"intArray,omitempty"`
-	IntList               []int               `json:"intList,omitempty"`
-	StringArray           []string            `json:"stringArray,omitempty"`
-	StringList            []string            `json:"stringList,omitempty"`
-	PocoArray             []Poco              `json:"pocoArray,omitempty"`
-	PocoList              []Poco              `json:"pocoList,omitempty"`
-	NullableByteArray     []*byte             `json:"nullableByteArray,omitempty"`
-	NullableByteList      []byte              `json:"nullableByteList,omitempty"`
-	NullableDateTimeArray []*time.Time        `json:"nullableDateTimeArray,omitempty"`
-	NullableDateTimeList  []time.Time         `json:"nullableDateTimeList,omitempty"`
-	PocoLookup            map[string]Poco[]   `json:"pocoLookup,omitempty"`
-	PocoLookupMap         map[string]{        [index:string]: Poco; }[] `json:"pocoLookupMap,omitempty"`
-	MapList               map[string]string[] `json:"mapList,omitempty"`
+	Int                   int                          `json:"int,omitempty"`
+	NullableId            *int                         `json:"nullableId,omitempty"`
+	Long                  int64                        `json:"long,omitempty"`
+	Double                float64                      `json:"double,omitempty"`
+	String                string                       `json:"string"`
+	DateTime              time.Time                    `json:"dateTime,omitempty"`
+	IntArray              []int                        `json:"intArray,omitempty"`
+	IntList               []int                        `json:"intList,omitempty"`
+	StringArray           []string                     `json:"stringArray,omitempty"`
+	StringList            []string                     `json:"stringList,omitempty"`
+	PocoArray             []Poco                       `json:"pocoArray,omitempty"`
+	PocoList              []Poco                       `json:"pocoList,omitempty"`
+	NullableByteArray     []*byte                      `json:"nullableByteArray,omitempty"`
+	NullableByteList      []byte                       `json:"nullableByteList,omitempty"`
+	NullableDateTimeArray []*time.Time                 `json:"nullableDateTimeArray,omitempty"`
+	NullableDateTimeList  []time.Time                  `json:"nullableDateTimeList,omitempty"`
+	PocoLookup            map[string][]Poco            `json:"pocoLookup,omitempty"`
+	PocoLookupMap         map[string][]map[string]Poco `json:"pocoLookupMap,omitempty"`
+	MapList               map[string][]string          `json:"mapList,omitempty"`
 }
 
 func (TestUploadWithDto) HttpMethod() string { return "POST" }
@@ -1220,50 +1220,50 @@ type HelloResponse struct {
 }
 
 type AllTypes struct {
-	Id               int               `json:"id,omitempty"`
-	NullableId       *int              `json:"nullableId,omitempty"`
-	Byte             byte              `json:"byte,omitempty"`
-	Short            int16             `json:"short,omitempty"`
-	Int              int               `json:"int,omitempty"`
-	Long             int64             `json:"long,omitempty"`
-	UShort           uint16            `json:"uShort,omitempty"`
-	UInt             uint32            `json:"uInt,omitempty"`
-	ULong            uint64            `json:"uLong,omitempty"`
-	Float            float32           `json:"float,omitempty"`
-	Double           float64           `json:"double,omitempty"`
-	Decimal          float64           `json:"decimal,omitempty"`
-	String           string            `json:"string"`
-	DateTime         time.Time         `json:"dateTime,omitempty"`
-	TimeSpan         time.Duration     `json:"timeSpan,omitempty"`
-	DateTimeOffset   time.Time         `json:"dateTimeOffset,omitempty"`
-	Guid             string            `json:"guid,omitempty"`
-	Char             string            `json:"char,omitempty"`
-	KeyValuePair     KeyValuePair      `json:"keyValuePair,omitempty"`
-	NullableDateTime *time.Time        `json:"nullableDateTime,omitempty"`
-	NullableTimeSpan *time.Duration    `json:"nullableTimeSpan,omitempty"`
-	StringList       []string          `json:"stringList"`
-	StringArray      []string          `json:"stringArray"`
-	StringMap        map[string]string `json:"stringMap"`
-	IntStringMap     map[int]string    `json:"intStringMap"`
-	SubType          SubType           `json:"subType"`
+	Id               int                          `json:"id,omitempty"`
+	NullableId       *int                         `json:"nullableId,omitempty"`
+	Byte             byte                         `json:"byte,omitempty"`
+	Short            int16                        `json:"short,omitempty"`
+	Int              int                          `json:"int,omitempty"`
+	Long             int64                        `json:"long,omitempty"`
+	UShort           uint16                       `json:"uShort,omitempty"`
+	UInt             uint32                       `json:"uInt,omitempty"`
+	ULong            uint64                       `json:"uLong,omitempty"`
+	Float            float32                      `json:"float,omitempty"`
+	Double           float64                      `json:"double,omitempty"`
+	Decimal          float64                      `json:"decimal,omitempty"`
+	String           string                       `json:"string"`
+	DateTime         time.Time                    `json:"dateTime,omitempty"`
+	TimeSpan         time.Duration                `json:"timeSpan,omitempty"`
+	DateTimeOffset   time.Time                    `json:"dateTimeOffset,omitempty"`
+	Guid             string                       `json:"guid,omitempty"`
+	Char             string                       `json:"char,omitempty"`
+	KeyValuePair     KeyValuePair[string, string] `json:"keyValuePair,omitempty"`
+	NullableDateTime *time.Time                   `json:"nullableDateTime,omitempty"`
+	NullableTimeSpan *time.Duration               `json:"nullableTimeSpan,omitempty"`
+	StringList       []string                     `json:"stringList"`
+	StringArray      []string                     `json:"stringArray"`
+	StringMap        map[string]string            `json:"stringMap"`
+	IntStringMap     map[int]string               `json:"intStringMap"`
+	SubType          SubType                      `json:"subType"`
 }
 
 func (AllTypes) HttpMethod() string { return "POST" }
 
 type AllCollectionTypes struct {
-	IntArray      []int             `json:"intArray"`
-	IntList       []int             `json:"intList"`
-	StringArray   []string          `json:"stringArray"`
-	StringList    []string          `json:"stringList"`
-	FloatArray    []float32         `json:"floatArray"`
-	DoubleList    []float64         `json:"doubleList"`
-	ByteArray     []byte            `json:"byteArray"`
-	CharArray     []string          `json:"charArray"`
-	DecimalList   []float64         `json:"decimalList"`
-	PocoArray     []Poco            `json:"pocoArray"`
-	PocoList      []Poco            `json:"pocoList"`
-	PocoLookup    map[string]Poco[] `json:"pocoLookup"`
-	PocoLookupMap map[string]{      [index:string]: Poco; }[] `json:"pocoLookupMap"`
+	IntArray      []int                        `json:"intArray"`
+	IntList       []int                        `json:"intList"`
+	StringArray   []string                     `json:"stringArray"`
+	StringList    []string                     `json:"stringList"`
+	FloatArray    []float32                    `json:"floatArray"`
+	DoubleList    []float64                    `json:"doubleList"`
+	ByteArray     []byte                       `json:"byteArray"`
+	CharArray     []string                     `json:"charArray"`
+	DecimalList   []float64                    `json:"decimalList"`
+	PocoArray     []Poco                       `json:"pocoArray"`
+	PocoList      []Poco                       `json:"pocoList"`
+	PocoLookup    map[string][]Poco            `json:"pocoLookup"`
+	PocoLookupMap map[string][]map[string]Poco `json:"pocoLookupMap"`
 }
 
 func (AllCollectionTypes) HttpMethod() string { return "POST" }
@@ -1456,9 +1456,7 @@ type EchoComplexTypes struct {
 func (EchoComplexTypes) HttpMethod() string { return "POST" }
 
 // @Route("/rockstars", "POST")
-type StoreRockstars struct {
-	[]Rockstar
-}
+type StoreRockstars []Rockstar
 
 func (StoreRockstars) HttpMethod() string { return "POST" }
 
@@ -2141,7 +2139,7 @@ func (HelloWithInheritance) CreateResponse() (r HelloWithInheritanceResponse) { 
 func (HelloWithInheritance) HttpMethod() string                               { return "POST" }
 
 type HelloWithGenericInheritance struct {
-	HelloBase
+	HelloBase_1[Poco]
 	Result string `json:"result"`
 }
 
@@ -2149,7 +2147,7 @@ func (HelloWithGenericInheritance) CreateResponseVoid() {}
 func (HelloWithGenericInheritance) HttpMethod() string  { return "POST" }
 
 type HelloWithGenericInheritance2 struct {
-	HelloBase
+	HelloBase_1[Hello]
 	Result string `json:"result"`
 }
 
