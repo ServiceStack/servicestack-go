@@ -1,0 +1,12 @@
+{
+  "name": "servicestack-go",
+  "version": "0.1.0",
+  "description": "Typed Go Client Library for consuming ServiceStack APIs",
+  "repository": "ServiceStack/servicestack-go",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "bump": "node scripts/bump.mjs",
+    "release": "node scripts/release.mjs"
+  }
+}

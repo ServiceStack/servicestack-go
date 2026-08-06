@@ -266,6 +266,25 @@ go test ./...                    # unit tests
 go test -tags integration ./...  # integration tests against test.servicestack.net
 ```
 
+## Releasing
+
+Releases are cut with npm scripts and published by the `release` GitHub Action:
+
+```bash
+npm run bump              # 0.1.0 -> 0.1.1 (also `-- minor`, `-- major`, `-- 1.2.3`)
+# describe the release in CHANGELOG.md, then
+npm run release
+```
+
+Or in a single step:
+
+```bash
+npm run release -- patch
+```
+
+`npm run release` tags the version, pushes it and creates the GitHub Release,
+which triggers the workflow that runs the tests and publishes it to the Go module proxy.
+
 ## License
 
 BSD-3-Clause. See [LICENSE](LICENSE).

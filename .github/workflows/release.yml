@@ -1,0 +1,56 @@
+name: release
+
+# Go modules are served straight from their git tag, so there's nothing to push
+# to a registry - this verifies the tag is consumable and warms the module proxy.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to verify, e.g. v0.1.1'
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: go test
+        run: go test ./...
+
+      - name: Publish to the Go module proxy
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          # Requesting the version is what makes proxy.golang.org fetch and cache it
+          GOPROXY=https://proxy.golang.org go list -m "github.com/ServiceStack/servicestack-go@$TAG"
+
+      - name: Verify it can be consumed from the proxy
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          mkdir -p "$RUNNER_TEMP/verify" && cd "$RUNNER_TEMP/verify"
+          go mod init verify
+          GOFLAGS=-mod=mod go get "github.com/ServiceStack/servicestack-go@$TAG"
+          cat > main.go <<'GO'
+          package main
+
+          import (
+              "fmt"
+              ss "github.com/ServiceStack/servicestack-go"
+          )
+
+          func main() {
+              fmt.Println(ss.NewClient("https://example.org").ReplyBaseUrl)
+          }
+          GO
+          go run .
