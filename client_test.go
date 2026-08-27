@@ -1,4 +1,5 @@
-package servicestack
+// Unit tests for the Client, served by a mock HTTP Server.
+package servicestack_test
 
 import (
 	"context"
@@ -11,60 +12,25 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	ss "github.com/ServiceStack/servicestack-go"
+
+	// Typed DTOs generated from https://test.servicestack.net with:
+	//     npx get-dtos go https://test.servicestack.net
+	"github.com/ServiceStack/servicestack-go/dtos"
 )
 
-// Test DTOs, matching the shape of generated DTOs.
-
-type Hello struct {
-	Name string `json:"name,omitempty"`
-}
-
-func (Hello) CreateResponse() (r HelloResponse) { return }
-func (Hello) HttpMethod() string                { return HttpGet }
-
-type HelloResponse struct {
-	Result         string          `json:"result,omitempty"`
-	ResponseStatus *ResponseStatus `json:"responseStatus,omitempty"`
-}
-
-type CreateHello struct {
-	Name string `json:"name,omitempty"`
-}
-
-func (CreateHello) CreateResponse() (r HelloResponse) { return }
-func (CreateHello) HttpMethod() string                { return HttpPost }
-
-type DeleteHello struct {
-	Id int `json:"id,omitempty"`
-}
-
-func (DeleteHello) CreateResponseVoid() {}
-func (DeleteHello) HttpMethod() string  { return HttpDelete }
-
-type Booking struct {
-	Id   int    `json:"id,omitempty"`
-	Name string `json:"name,omitempty"`
-}
-
-type QueryBookings struct {
-	QueryDb
-	Id *int `json:"id,omitempty"`
-}
-
-func (QueryBookings) CreateResponse() (r QueryResponse[Booking]) { return }
-func (QueryBookings) HttpMethod() string                         { return HttpGet }
-
 // newTestClient returns a Client and Server that records the last Request.
-func newTestClient(t *testing.T, handler http.HandlerFunc) (*Client, *httptest.Server) {
+func newTestClient(t *testing.T, handler http.HandlerFunc) (*ss.Client, *httptest.Server) {
 	t.Helper()
 	server := httptest.NewServer(handler)
 	t.Cleanup(server.Close)
-	return NewClient(server.URL), server
+	return ss.NewClient(server.URL), server
 }
 
 func writeJson(t *testing.T, w http.ResponseWriter, statusCode int, body any) {
 	t.Helper()
-	w.Header().Set(HeaderContentType, MimeTypeJson)
+	w.Header().Set(ss.HeaderContentType, ss.MimeTypeJson)
 	w.WriteHeader(statusCode)
 	if err := json.NewEncoder(w).Encode(body); err != nil {
 		t.Fatalf("failed to write response: %v", err)
@@ -75,21 +41,21 @@ func TestSendGetRequestUsesQueryString(t *testing.T) {
 	var gotUrl, gotMethod string
 	client, _ := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		gotUrl, gotMethod = r.URL.String(), r.Method
-		writeJson(t, w, http.StatusOK, HelloResponse{Result: "Hello, World!"})
+		writeJson(t, w, http.StatusOK, dtos.HelloVerbResponse{Result: "Hello, World!"})
 	})
 
-	res, err := Send(client, Hello{Name: "World"})
+	res, err := ss.Send(client, dtos.HelloGet{Id: 1})
 	if err != nil {
 		t.Fatalf("Send failed: %v", err)
 	}
 	if res.Result != "Hello, World!" {
 		t.Errorf("got Result %q, want %q", res.Result, "Hello, World!")
 	}
-	if gotMethod != HttpGet {
+	if gotMethod != ss.HttpGet {
 		t.Errorf("got method %q, want GET", gotMethod)
 	}
-	if gotUrl != "/api/Hello?name=World" {
-		t.Errorf("got url %q, want /api/Hello?name=World", gotUrl)
+	if gotUrl != "/api/HelloGet?id=1" {
+		t.Errorf("got url %q, want /api/HelloGet?id=1", gotUrl)
 	}
 }
 
@@ -98,38 +64,38 @@ func TestSendPostRequestUsesJsonBody(t *testing.T) {
 	client, _ := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
 		gotUrl, gotMethod, gotBody = r.URL.String(), r.Method, string(body)
-		gotContentType = r.Header.Get(HeaderContentType)
-		writeJson(t, w, http.StatusOK, HelloResponse{Result: "Hello, World!"})
+		gotContentType = r.Header.Get(ss.HeaderContentType)
+		writeJson(t, w, http.StatusOK, dtos.HelloResponse{Result: "Hello, World!"})
 	})
 
-	if _, err := Send(client, CreateHello{Name: "World"}); err != nil {
+	if _, err := ss.Send(client, dtos.Hello{Name: "World", Title: "Mr"}); err != nil {
 		t.Fatalf("Send failed: %v", err)
 	}
-	if gotMethod != HttpPost {
+	if gotMethod != ss.HttpPost {
 		t.Errorf("got method %q, want POST", gotMethod)
 	}
-	if gotUrl != "/api/CreateHello" {
-		t.Errorf("got url %q, want /api/CreateHello", gotUrl)
+	if gotUrl != "/api/Hello" {
+		t.Errorf("got url %q, want /api/Hello", gotUrl)
 	}
-	if gotContentType != MimeTypeJson {
-		t.Errorf("got Content-Type %q, want %q", gotContentType, MimeTypeJson)
+	if gotContentType != ss.MimeTypeJson {
+		t.Errorf("got Content-Type %q, want %q", gotContentType, ss.MimeTypeJson)
 	}
-	if gotBody != `{"name":"World"}` {
-		t.Errorf("got body %q, want %q", gotBody, `{"name":"World"}`)
+	if gotBody != `{"name":"World","title":"Mr"}` {
+		t.Errorf("got body %q, want %q", gotBody, `{"name":"World","title":"Mr"}`)
 	}
 }
 
 func TestSendInfersGenericResponseType(t *testing.T) {
 	client, _ := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
-		writeJson(t, w, http.StatusOK, QueryResponse[Booking]{
+		writeJson(t, w, http.StatusOK, ss.QueryResponse[dtos.Booking]{
 			Offset:  0,
 			Total:   1,
-			Results: []Booking{{Id: 1, Name: "First Booking"}},
+			Results: []dtos.Booking{{Id: 1, Name: "First Booking"}},
 		})
 	})
 
 	take := 10
-	res, err := Send(client, QueryBookings{QueryDb: QueryDb{QueryBase{Take: &take}}})
+	res, err := ss.Send(client, dtos.QueryBookings{QueryDb: ss.QueryDb{ss.QueryBase{Take: &take}}})
 	if err != nil {
 		t.Fatalf("Send failed: %v", err)
 	}
@@ -142,11 +108,11 @@ func TestSendAppendsInheritedQueryStringArgs(t *testing.T) {
 	var gotUrl string
 	client, _ := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		gotUrl = r.URL.String()
-		writeJson(t, w, http.StatusOK, QueryResponse[Booking]{})
+		writeJson(t, w, http.StatusOK, ss.QueryResponse[dtos.Booking]{})
 	})
 
 	skip, take := 5, 10
-	_, err := Send(client, QueryBookings{QueryDb: QueryDb{QueryBase{Skip: &skip, Take: &take, OrderBy: "id"}}})
+	_, err := ss.Send(client, dtos.QueryBookings{QueryDb: ss.QueryDb{ss.QueryBase{Skip: &skip, Take: &take, OrderBy: "id"}}})
 	if err != nil {
 		t.Fatalf("Send failed: %v", err)
 	}
@@ -164,26 +130,26 @@ func TestSendVoidIgnoresResponseBody(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	if err := SendVoid(client, DeleteHello{Id: 1}); err != nil {
+	if err := ss.SendVoid(client, dtos.DeleteBooking{Id: 1}); err != nil {
 		t.Fatalf("SendVoid failed: %v", err)
 	}
-	if gotMethod != HttpDelete {
+	if gotMethod != ss.HttpDelete {
 		t.Errorf("got method %q, want DELETE", gotMethod)
 	}
-	if gotUrl != "/api/DeleteHello?id=1" {
-		t.Errorf("got url %q, want /api/DeleteHello?id=1", gotUrl)
+	if gotUrl != "/api/DeleteBooking?id=1" {
+		t.Errorf("got url %q, want /api/DeleteBooking?id=1", gotUrl)
 	}
 }
 
 func TestSendAsWithExplicitResponseType(t *testing.T) {
 	client, _ := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
-		writeJson(t, w, http.StatusOK, HelloResponse{Result: "Hello, World!"})
+		writeJson(t, w, http.StatusOK, dtos.HelloResponse{Result: "Hello, World!"})
 	})
 
 	type UnTypedHello struct {
 		Name string `json:"name,omitempty"`
 	}
-	res, err := SendAs[HelloResponse](client, UnTypedHello{Name: "World"})
+	res, err := ss.SendAs[dtos.HelloResponse](client, UnTypedHello{Name: "World"})
 	if err != nil {
 		t.Fatalf("SendAs failed: %v", err)
 	}
@@ -195,22 +161,22 @@ func TestSendAsWithExplicitResponseType(t *testing.T) {
 func TestErrorResponseReturnsWebServiceException(t *testing.T) {
 	client, _ := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		writeJson(t, w, http.StatusBadRequest, map[string]any{
-			"responseStatus": ResponseStatus{
+			"responseStatus": ss.ResponseStatus{
 				ErrorCode: "NotEmpty",
 				Message:   "'Name' must not be empty.",
-				Errors: []ResponseError{
+				Errors: []ss.ResponseError{
 					{ErrorCode: "NotEmpty", FieldName: "Name", Message: "'Name' must not be empty."},
 				},
 			},
 		})
 	})
 
-	_, err := Send(client, Hello{})
+	_, err := ss.Send(client, dtos.Hello{})
 	if err == nil {
 		t.Fatal("expected an error")
 	}
 
-	var webEx *WebServiceException
+	var webEx *ss.WebServiceException
 	if !errors.As(err, &webEx) {
 		t.Fatalf("got %T, want *WebServiceException", err)
 	}
@@ -226,10 +192,10 @@ func TestErrorResponseReturnsWebServiceException(t *testing.T) {
 	if !webEx.IsValidationError() {
 		t.Error("expected IsValidationError to be true")
 	}
-	if GetStatusCode(err) != http.StatusBadRequest {
-		t.Errorf("got GetStatusCode %d, want 400", GetStatusCode(err))
+	if ss.GetStatusCode(err) != http.StatusBadRequest {
+		t.Errorf("got GetStatusCode %d, want 400", ss.GetStatusCode(err))
 	}
-	if status := GetResponseStatus(err); status == nil || status.ErrorCode != "NotEmpty" {
+	if status := ss.GetResponseStatus(err); status == nil || status.ErrorCode != "NotEmpty" {
 		t.Errorf("got GetResponseStatus %+v", status)
 	}
 }
@@ -240,8 +206,8 @@ func TestErrorResponseWithoutResponseStatus(t *testing.T) {
 		_, _ = w.Write([]byte("<html>Not Found</html>"))
 	})
 
-	_, err := Send(client, Hello{Name: "World"})
-	webEx, ok := AsWebServiceException(err)
+	_, err := ss.Send(client, dtos.Hello{Name: "World"})
+	webEx, ok := ss.AsWebServiceException(err)
 	if !ok {
 		t.Fatalf("got %T, want *WebServiceException", err)
 	}
@@ -259,17 +225,17 @@ func TestErrorResponseWithoutResponseStatus(t *testing.T) {
 func TestApiReturnsErrorStatusInsteadOfError(t *testing.T) {
 	client, _ := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		writeJson(t, w, http.StatusBadRequest, map[string]any{
-			"responseStatus": ResponseStatus{
+			"responseStatus": ss.ResponseStatus{
 				ErrorCode: "NotEmpty",
 				Message:   "'Name' must not be empty.",
-				Errors: []ResponseError{
+				Errors: []ss.ResponseError{
 					{ErrorCode: "NotEmpty", FieldName: "Name", Message: "'Name' must not be empty."},
 				},
 			},
 		})
 	})
 
-	api := Api(client, Hello{})
+	api := ss.Api(client, dtos.Hello{})
 	if api.Succeeded() {
 		t.Fatal("expected the Api Request to fail")
 	}
@@ -283,10 +249,10 @@ func TestApiReturnsErrorStatusInsteadOfError(t *testing.T) {
 
 func TestApiSucceeded(t *testing.T) {
 	client, _ := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
-		writeJson(t, w, http.StatusOK, HelloResponse{Result: "Hello, World!"})
+		writeJson(t, w, http.StatusOK, dtos.HelloResponse{Result: "Hello, World!"})
 	})
 
-	api := Api(client, Hello{Name: "World"})
+	api := ss.Api(client, dtos.Hello{Name: "World"})
 	if api.Failed() {
 		t.Fatalf("expected the Api Request to succeed, got %v", api.Error)
 	}
@@ -301,12 +267,12 @@ func TestApiSucceeded(t *testing.T) {
 func TestBearerTokenAndBasicAuthHeaders(t *testing.T) {
 	var gotAuth string
 	client, _ := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
-		gotAuth = r.Header.Get(HeaderAuthorization)
-		writeJson(t, w, http.StatusOK, HelloResponse{})
+		gotAuth = r.Header.Get(ss.HeaderAuthorization)
+		writeJson(t, w, http.StatusOK, dtos.HelloResponse{})
 	})
 
 	client.SetBearerToken("TOKEN")
-	if _, err := Send(client, Hello{Name: "World"}); err != nil {
+	if _, err := ss.Send(client, dtos.Hello{Name: "World"}); err != nil {
 		t.Fatalf("Send failed: %v", err)
 	}
 	if gotAuth != "Bearer TOKEN" {
@@ -314,7 +280,7 @@ func TestBearerTokenAndBasicAuthHeaders(t *testing.T) {
 	}
 
 	client.SetBearerToken("").SetCredentials("user", "pass")
-	if _, err := Send(client, Hello{Name: "World"}); err != nil {
+	if _, err := ss.Send(client, dtos.Hello{Name: "World"}); err != nil {
 		t.Fatalf("Send failed: %v", err)
 	}
 	if gotAuth != "Basic dXNlcjpwYXNz" {
@@ -327,13 +293,13 @@ func TestCustomHeadersAndRequestFilter(t *testing.T) {
 	client, _ := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		gotHeader = r.Header.Get("X-Api-Key")
 		gotFilterHeader = r.Header.Get("X-Filter")
-		writeJson(t, w, http.StatusOK, HelloResponse{})
+		writeJson(t, w, http.StatusOK, dtos.HelloResponse{})
 	})
 
 	client.SetHeader("X-Api-Key", "KEY")
 	client.RequestFilter = func(req *http.Request) { req.Header.Set("X-Filter", "1") }
 
-	if _, err := Send(client, Hello{Name: "World"}); err != nil {
+	if _, err := ss.Send(client, dtos.Hello{Name: "World"}); err != nil {
 		t.Fatalf("Send failed: %v", err)
 	}
 	if gotHeader != "KEY" {
@@ -350,20 +316,20 @@ func TestRefreshTokenFetchesNewBearerTokenAndRetries(t *testing.T) {
 		requests = append(requests, r.Method+" "+r.URL.Path)
 		switch r.URL.Path {
 		case "/api/GetAccessToken":
-			writeJson(t, w, http.StatusOK, GetAccessTokenResponse{AccessToken: "NEW_TOKEN"})
+			writeJson(t, w, http.StatusOK, ss.GetAccessTokenResponse{AccessToken: "NEW_TOKEN"})
 		default:
-			if r.Header.Get(HeaderAuthorization) != "Bearer NEW_TOKEN" {
+			if r.Header.Get(ss.HeaderAuthorization) != "Bearer NEW_TOKEN" {
 				writeJson(t, w, http.StatusUnauthorized, map[string]any{
-					"responseStatus": ResponseStatus{ErrorCode: "Unauthorized", Message: "Unauthorized"},
+					"responseStatus": ss.ResponseStatus{ErrorCode: "Unauthorized", Message: "Unauthorized"},
 				})
 				return
 			}
-			writeJson(t, w, http.StatusOK, HelloResponse{Result: "Hello, World!"})
+			writeJson(t, w, http.StatusOK, dtos.HelloResponse{Result: "Hello, World!"})
 		}
 	})
 
 	client.SetRefreshToken("REFRESH_TOKEN")
-	res, err := Send(client, Hello{Name: "World"})
+	res, err := ss.Send(client, dtos.Hello{Name: "World"})
 	if err != nil {
 		t.Fatalf("Send failed: %v", err)
 	}
@@ -373,7 +339,7 @@ func TestRefreshTokenFetchesNewBearerTokenAndRetries(t *testing.T) {
 	if client.BearerToken() != "NEW_TOKEN" {
 		t.Errorf("got BearerToken %q, want NEW_TOKEN", client.BearerToken())
 	}
-	want := []string{"GET /api/Hello", "POST /api/GetAccessToken", "GET /api/Hello"}
+	want := []string{"POST /api/Hello", "POST /api/GetAccessToken", "POST /api/Hello"}
 	if strings.Join(requests, ",") != strings.Join(want, ",") {
 		t.Errorf("got requests %v, want %v", requests, want)
 	}
@@ -384,12 +350,12 @@ func TestUnauthorizedWithoutRefreshTokenReturnsError(t *testing.T) {
 	client, _ := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		requests++
 		writeJson(t, w, http.StatusUnauthorized, map[string]any{
-			"responseStatus": ResponseStatus{ErrorCode: "Unauthorized", Message: "Unauthorized"},
+			"responseStatus": ss.ResponseStatus{ErrorCode: "Unauthorized", Message: "Unauthorized"},
 		})
 	})
 
-	_, err := Send(client, Hello{Name: "World"})
-	webEx, ok := AsWebServiceException(err)
+	_, err := ss.Send(client, dtos.Hello{Name: "World"})
+	webEx, ok := ss.AsWebServiceException(err)
 	if !ok {
 		t.Fatalf("got %T, want *WebServiceException", err)
 	}
@@ -405,19 +371,19 @@ func TestOnAuthenticationRequiredRetriesOnce(t *testing.T) {
 	requests := 0
 	client, _ := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		requests++
-		if r.Header.Get(HeaderAuthorization) == "" {
+		if r.Header.Get(ss.HeaderAuthorization) == "" {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
-		writeJson(t, w, http.StatusOK, HelloResponse{Result: "Authenticated"})
+		writeJson(t, w, http.StatusOK, dtos.HelloResponse{Result: "Authenticated"})
 	})
 
-	client.OnAuthenticationRequired = func(c *Client) error {
+	client.OnAuthenticationRequired = func(c *ss.Client) error {
 		c.SetBearerToken("TOKEN")
 		return nil
 	}
 
-	res, err := Send(client, Hello{Name: "World"})
+	res, err := ss.Send(client, dtos.Hello{Name: "World"})
 	if err != nil {
 		t.Fatalf("Send failed: %v", err)
 	}
@@ -434,10 +400,10 @@ func TestSendAllBatchesRequests(t *testing.T) {
 	client, _ := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
 		gotUrl, gotBody = r.URL.String(), string(body)
-		writeJson(t, w, http.StatusOK, []HelloResponse{{Result: "Hello, A!"}, {Result: "Hello, B!"}})
+		writeJson(t, w, http.StatusOK, []dtos.HelloResponse{{Result: "Hello, A!"}, {Result: "Hello, B!"}})
 	})
 
-	responses, err := SendAll(client, []Hello{{Name: "A"}, {Name: "B"}})
+	responses, err := ss.SendAll(client, []dtos.Hello{{Name: "A", Title: "Mr"}, {Name: "B", Title: "Ms"}})
 	if err != nil {
 		t.Fatalf("SendAll failed: %v", err)
 	}
@@ -447,7 +413,7 @@ func TestSendAllBatchesRequests(t *testing.T) {
 	if gotUrl != "/api/Hello[]" {
 		t.Errorf("got url %q, want /api/Hello[]", gotUrl)
 	}
-	if gotBody != `[{"name":"A"},{"name":"B"}]` {
+	if gotBody != `[{"name":"A","title":"Mr"},{"name":"B","title":"Ms"}]` {
 		t.Errorf("got body %q", gotBody)
 	}
 }
@@ -459,11 +425,11 @@ func TestPublishSendsToOneWayUrl(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	if err := Publish(client, CreateHello{Name: "World"}); err != nil {
+	if err := ss.Publish(client, dtos.Hello{Name: "World"}); err != nil {
 		t.Fatalf("Publish failed: %v", err)
 	}
-	if gotUrl != "/api/CreateHello" {
-		t.Errorf("got url %q, want /api/CreateHello", gotUrl)
+	if gotUrl != "/api/Hello" {
+		t.Errorf("got url %q, want /api/Hello", gotUrl)
 	}
 }
 
@@ -471,10 +437,10 @@ func TestUrlApiSendsToCustomPath(t *testing.T) {
 	var gotUrl string
 	client, _ := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		gotUrl = r.URL.String()
-		writeJson(t, w, http.StatusOK, HelloResponse{Result: "Hello, World!"})
+		writeJson(t, w, http.StatusOK, dtos.HelloResponse{Result: "Hello, World!"})
 	})
 
-	res, err := GetUrl[HelloResponse](client, "/hello/World", map[string]any{"detailed": true})
+	res, err := ss.GetUrl[dtos.HelloResponse](client, "/hello/World", map[string]any{"detailed": true})
 	if err != nil {
 		t.Fatalf("GetUrl failed: %v", err)
 	}
@@ -491,7 +457,7 @@ func TestGetUrlAsStringAndBytes(t *testing.T) {
 		_, _ = w.Write([]byte("plain text"))
 	})
 
-	str, err := GetUrl[string](client, "/text")
+	str, err := ss.GetUrl[string](client, "/text")
 	if err != nil {
 		t.Fatalf("GetUrl[string] failed: %v", err)
 	}
@@ -499,7 +465,7 @@ func TestGetUrlAsStringAndBytes(t *testing.T) {
 		t.Errorf("got %q, want plain text", str)
 	}
 
-	data, err := GetUrl[[]byte](client, "/text")
+	data, err := ss.GetUrl[[]byte](client, "/text")
 	if err != nil {
 		t.Fatalf("GetUrl[[]byte] failed: %v", err)
 	}
@@ -511,9 +477,9 @@ func TestGetUrlAsStringAndBytes(t *testing.T) {
 func TestPostFilesWithRequest(t *testing.T) {
 	var gotFileName, gotFileContent, gotField string
 	client, _ := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
-		mediaType, params, err := mime.ParseMediaType(r.Header.Get(HeaderContentType))
+		mediaType, params, err := mime.ParseMediaType(r.Header.Get(ss.HeaderContentType))
 		if err != nil || !strings.HasPrefix(mediaType, "multipart/") {
-			t.Errorf("got Content-Type %q, want multipart", r.Header.Get(HeaderContentType))
+			t.Errorf("got Content-Type %q, want multipart", r.Header.Get(ss.HeaderContentType))
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -526,14 +492,18 @@ func TestPostFilesWithRequest(t *testing.T) {
 			content, _ := io.ReadAll(part)
 			if part.FileName() != "" {
 				gotFileName, gotFileContent = part.FileName(), string(content)
-			} else if part.FormName() == "name" {
+			} else if part.FormName() == "refId" {
 				gotField = string(content)
 			}
 		}
-		writeJson(t, w, http.StatusOK, HelloResponse{Result: "Uploaded"})
+		writeJson(t, w, http.StatusOK, dtos.TestFileUploadsResponse{
+			Files: []dtos.UploadInfo{{FileName: "hello.txt"}},
+		})
 	})
 
-	res, err := PostFileWithRequest(client, CreateHello{Name: "World"}, UploadFile{
+	// Request DTO properties are sent as form fields alongside the uploaded files
+	refId := "Holiday"
+	res, err := ss.PostFileWithRequest(client, dtos.TestFileUploads{RefId: &refId}, ss.UploadFile{
 		FieldName:   "file",
 		FileName:    "hello.txt",
 		ContentType: "text/plain",
@@ -542,14 +512,14 @@ func TestPostFilesWithRequest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PostFileWithRequest failed: %v", err)
 	}
-	if res.Result != "Uploaded" {
-		t.Errorf("got Result %q", res.Result)
+	if len(res.Files) != 1 || res.Files[0].FileName != "hello.txt" {
+		t.Errorf("got Files %+v", res.Files)
 	}
 	if gotFileName != "hello.txt" || gotFileContent != "file contents" {
 		t.Errorf("got file %q with contents %q", gotFileName, gotFileContent)
 	}
-	if gotField != "World" {
-		t.Errorf("got name field %q, want World", gotField)
+	if gotField != "Holiday" {
+		t.Errorf("got refId field %q, want Holiday", gotField)
 	}
 }
 
@@ -561,7 +531,7 @@ func TestContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	_, err := SendCtx(ctx, client, Hello{Name: "World"})
+	_, err := ss.SendCtx(ctx, client, dtos.Hello{Name: "World"})
 	if err == nil {
 		t.Fatal("expected an error")
 	}
@@ -571,20 +541,20 @@ func TestContextCancellation(t *testing.T) {
 }
 
 func TestBasePathConfiguration(t *testing.T) {
-	client := NewJsonServiceClient("https://example.org")
-	if got := client.CreateUrlFromDto(HttpPost, CreateHello{}); got != "https://example.org/json/reply/CreateHello" {
+	client := ss.NewJsonServiceClient("https://example.org")
+	if got := client.CreateUrlFromDto(ss.HttpPost, dtos.Hello{}); got != "https://example.org/json/reply/Hello" {
 		t.Errorf("got %q", got)
 	}
 	if client.OneWayBaseUrl != "https://example.org/json/oneway" {
 		t.Errorf("got OneWayBaseUrl %q", client.OneWayBaseUrl)
 	}
 
-	client = NewClient("https://example.org/")
-	if got := client.CreateUrlFromDto(HttpPost, CreateHello{}); got != "https://example.org/api/CreateHello" {
+	client = ss.NewClient("https://example.org/")
+	if got := client.CreateUrlFromDto(ss.HttpPost, dtos.Hello{}); got != "https://example.org/api/Hello" {
 		t.Errorf("got %q", got)
 	}
 	client.SetBasePath("custom/api")
-	if got := client.CreateUrlFromDto(HttpPost, CreateHello{}); got != "https://example.org/custom/api/CreateHello" {
+	if got := client.CreateUrlFromDto(ss.HttpPost, dtos.Hello{}); got != "https://example.org/custom/api/Hello" {
 		t.Errorf("got %q", got)
 	}
 }
@@ -596,16 +566,16 @@ func TestSessionCookiesArePreserved(t *testing.T) {
 			gotCookie = cookie.Value
 		}
 		http.SetCookie(w, &http.Cookie{Name: "ss-id", Value: "SESSION_ID", Path: "/"})
-		writeJson(t, w, http.StatusOK, HelloResponse{})
+		writeJson(t, w, http.StatusOK, dtos.HelloResponse{})
 	})
 
-	if _, err := Send(client, Hello{Name: "1"}); err != nil {
+	if _, err := ss.Send(client, dtos.Hello{Name: "1"}); err != nil {
 		t.Fatalf("Send failed: %v", err)
 	}
 	if gotCookie != "" {
 		t.Errorf("got cookie %q on first request, want none", gotCookie)
 	}
-	if _, err := Send(client, Hello{Name: "2"}); err != nil {
+	if _, err := ss.Send(client, dtos.Hello{Name: "2"}); err != nil {
 		t.Fatalf("Send failed: %v", err)
 	}
 	if gotCookie != "SESSION_ID" {
@@ -615,7 +585,7 @@ func TestSessionCookiesArePreserved(t *testing.T) {
 
 func TestAuthenticateUsesReturnedTokens(t *testing.T) {
 	client, _ := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
-		writeJson(t, w, http.StatusOK, AuthenticateResponse{
+		writeJson(t, w, http.StatusOK, ss.AuthenticateResponse{
 			UserName:     "user",
 			BearerToken:  "BEARER",
 			RefreshToken: "REFRESH",
@@ -639,7 +609,7 @@ func TestInvalidJsonResponseReturnsError(t *testing.T) {
 		_, _ = w.Write([]byte("<html>not json</html>"))
 	})
 
-	_, err := Send(client, Hello{Name: "World"})
+	_, err := ss.Send(client, dtos.Hello{Name: "World"})
 	if err == nil {
 		t.Fatal("expected an error")
 	}
@@ -649,9 +619,9 @@ func TestInvalidJsonResponseReturnsError(t *testing.T) {
 }
 
 func TestConnectionErrorReturnsWebServiceException(t *testing.T) {
-	client := NewClient("http://127.0.0.1:1")
-	_, err := Send(client, Hello{Name: "World"})
-	webEx, ok := AsWebServiceException(err)
+	client := ss.NewClient("http://127.0.0.1:1")
+	_, err := ss.Send(client, dtos.Hello{Name: "World"})
+	webEx, ok := ss.AsWebServiceException(err)
 	if !ok {
 		t.Fatalf("got %T, want *WebServiceException", err)
 	}

@@ -1,8 +1,15 @@
-package servicestack
+// Unit tests for the Client's URL and DTO utils.
+package servicestack_test
 
 import (
 	"testing"
 	"time"
+
+	ss "github.com/ServiceStack/servicestack-go"
+
+	// Typed DTOs generated from https://test.servicestack.net with:
+	//     npx get-dtos go https://test.servicestack.net
+	"github.com/ServiceStack/servicestack-go/dtos"
 )
 
 func TestCombineWith(t *testing.T) {
@@ -19,7 +26,7 @@ func TestCombineWith(t *testing.T) {
 		{"https://example.org", nil, "https://example.org"},
 	}
 	for _, test := range tests {
-		if got := CombineWith(test.base, test.paths...); got != test.want {
+		if got := ss.CombineWith(test.base, test.paths...); got != test.want {
 			t.Errorf("CombineWith(%q, %v) = %q, want %q", test.base, test.paths, got, test.want)
 		}
 	}
@@ -41,7 +48,7 @@ func TestAppendQueryString(t *testing.T) {
 		{"/api/Hello", map[string]any{"enabled": true}, "/api/Hello?enabled=true"},
 	}
 	for _, test := range tests {
-		if got := AppendQueryString(test.url, test.args); got != test.want {
+		if got := ss.AppendQueryString(test.url, test.args); got != test.want {
 			t.Errorf("AppendQueryString(%q, %v) = %q, want %q", test.url, test.args, got, test.want)
 		}
 	}
@@ -68,23 +75,23 @@ func TestQsValue(t *testing.T) {
 		{0 * time.Second, "PT0S"},
 	}
 	for _, test := range tests {
-		if got := QsValue(test.val); got != test.want {
+		if got := ss.QsValue(test.val); got != test.want {
 			t.Errorf("QsValue(%v) = %q, want %q", test.val, got, test.want)
 		}
 	}
 }
 
 func TestNameOf(t *testing.T) {
-	if got := NameOf(Hello{}); got != "Hello" {
+	if got := ss.NameOf(dtos.Hello{}); got != "Hello" {
 		t.Errorf("got %q, want Hello", got)
 	}
-	if got := NameOf(&Hello{}); got != "Hello" {
+	if got := ss.NameOf(&dtos.Hello{}); got != "Hello" {
 		t.Errorf("got %q, want Hello", got)
 	}
-	if got := NameOf(nil); got != "" {
+	if got := ss.NameOf(nil); got != "" {
 		t.Errorf("got %q, want empty", got)
 	}
-	if got := NameOf(QueryResponse[Booking]{}); got != "QueryResponse" {
+	if got := ss.NameOf(ss.QueryResponse[dtos.Booking]{}); got != "QueryResponse" {
 		t.Errorf("got %q, want QueryResponse", got)
 	}
 }
@@ -94,15 +101,15 @@ func TestResolveHttpMethod(t *testing.T) {
 		request any
 		want    string
 	}{
-		{Hello{}, HttpGet},          // declared with HttpMethod()
-		{CreateHello{}, HttpPost},   // declared with HttpMethod()
-		{DeleteHello{}, HttpDelete}, // declared with HttpMethod()
-		{struct{}{}, HttpPost},      // default
-		{GetApiKeys{}, HttpGet},     // declared with HttpMethod()
-		{Authenticate{}, HttpPost},  // declared with HttpMethod()
+		{dtos.HelloGet{}, ss.HttpGet},         // declared with HttpMethod()
+		{dtos.Hello{}, ss.HttpPost},           // declared with HttpMethod()
+		{dtos.DeleteBooking{}, ss.HttpDelete}, // declared with HttpMethod()
+		{struct{}{}, ss.HttpPost},             // default
+		{ss.GetApiKeys{}, ss.HttpGet},         // declared with HttpMethod()
+		{ss.Authenticate{}, ss.HttpPost},      // declared with HttpMethod()
 	}
 	for _, test := range tests {
-		if got := ResolveHttpMethod(test.request); got != test.want {
+		if got := ss.ResolveHttpMethod(test.request); got != test.want {
 			t.Errorf("ResolveHttpMethod(%T) = %q, want %q", test.request, got, test.want)
 		}
 	}
@@ -117,27 +124,27 @@ func TestResolveHttpMethod(t *testing.T) {
 		request any
 		want    string
 	}{
-		{QueryTodos{}, HttpGet},
-		{UpdateTodo{}, HttpPut},
-		{DeleteTodo{}, HttpDelete},
-		{PatchTodo{}, HttpPatch},
-		{SaveTodo{}, HttpPost},
+		{QueryTodos{}, ss.HttpGet},
+		{UpdateTodo{}, ss.HttpPut},
+		{DeleteTodo{}, ss.HttpDelete},
+		{PatchTodo{}, ss.HttpPatch},
+		{SaveTodo{}, ss.HttpPost},
 	}
 	for _, test := range nameTests {
-		if got := ResolveHttpMethod(test.request); got != test.want {
+		if got := ss.ResolveHttpMethod(test.request); got != test.want {
 			t.Errorf("ResolveHttpMethod(%T) = %q, want %q", test.request, got, test.want)
 		}
 	}
 }
 
 func TestHasRequestBody(t *testing.T) {
-	for _, method := range []string{HttpPost, HttpPut, HttpPatch} {
-		if !HasRequestBody(method) {
+	for _, method := range []string{ss.HttpPost, ss.HttpPut, ss.HttpPatch} {
+		if !ss.HasRequestBody(method) {
 			t.Errorf("HasRequestBody(%q) = false, want true", method)
 		}
 	}
-	for _, method := range []string{HttpGet, HttpDelete, HttpHead, HttpOptions, "get"} {
-		if HasRequestBody(method) {
+	for _, method := range []string{ss.HttpGet, ss.HttpDelete, ss.HttpHead, ss.HttpOptions, "get"} {
+		if ss.HasRequestBody(method) {
 			t.Errorf("HasRequestBody(%q) = true, want false", method)
 		}
 	}
@@ -145,20 +152,20 @@ func TestHasRequestBody(t *testing.T) {
 
 func TestDtoToMapOmitsEmptyProperties(t *testing.T) {
 	take := 10
-	args := DtoToMap(QueryBookings{QueryDb: QueryDb{QueryBase{Take: &take}}})
+	args := ss.DtoToMap(dtos.QueryBookings{QueryDb: ss.QueryDb{ss.QueryBase{Take: &take}}})
 	if len(args) != 1 {
 		t.Fatalf("got %v, want only take", args)
 	}
-	if QsValue(args["take"]) != "10" {
+	if ss.QsValue(args["take"]) != "10" {
 		t.Errorf("got take %v, want 10", args["take"])
 	}
 }
 
 func TestToAbsoluteUrl(t *testing.T) {
-	if got := ToAbsoluteUrl("https://example.org", "/api/Hello"); got != "https://example.org/api/Hello" {
+	if got := ss.ToAbsoluteUrl("https://example.org", "/api/Hello"); got != "https://example.org/api/Hello" {
 		t.Errorf("got %q", got)
 	}
-	if got := ToAbsoluteUrl("https://example.org", "https://other.org/api"); got != "https://other.org/api" {
+	if got := ss.ToAbsoluteUrl("https://example.org", "https://other.org/api"); got != "https://other.org/api" {
 		t.Errorf("got %q", got)
 	}
 }
